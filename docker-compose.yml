@@ -1,0 +1,68 @@
+version: '3.8'
+
+networks:
+  bank-net:
+    driver: bridge
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: bank-redis
+    restart: always
+    networks:
+      - bank-net
+
+  python-rag:
+    build: ./bank-agent-demo
+#    image: bank-python-rag:1.0   # 可选，如果你已经构建好
+    container_name: bank-python-rag
+    restart: always
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./models:/root/.cache/huggingface
+      - ./chroma_db:/app/chroma_db
+    networks:
+      - bank-net
+    depends_on:
+      - redis
+
+  java-backend:
+    build: ./bank-chat-middle-platform
+#    image: bank-java-backend:1.0
+    container_name: bank-java
+    restart: always
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - REDIS_HOST=redis
+      - RAG_SERVICE_URL=http://python-rag:8000/rag/query
+    networks:
+      - bank-net
+    depends_on:
+      - redis
+      - python-rag
+
+  streamlit:
+    build: ./bank-streamlit
+#    image: bank-streamlit:1.0
+    container_name: bank-streamlit
+    restart: always
+    networks:
+      - bank-net
+    # 不映射任何端口到宿主机
+
+  nginx:
+    image: nginx:alpine
+    container_name: bank-nginx
+    restart: always
+    ports:
+      - "80:80"          # 仅暴露 HTTP 端口
+      # - "443:443"      # 如需 HTTPS 再添加
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - bank-net
+    depends_on:
+      - streamlit
+      - java-backend

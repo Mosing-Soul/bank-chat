@@ -1,0 +1,17 @@
+rag:
+  python:
+    url: ${RAG_SERVICE_URL:http://localhost:8000/rag/query}   # 根据实际部署修改
+
+spring:
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    timeout: 2000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+
+server:
+  port: 8080

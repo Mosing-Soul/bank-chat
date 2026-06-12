@@ -15,7 +15,6 @@ public class RedisConfig {
 
     @Bean
     public RedisTemplate<String, List<HistoryMessage>> redisTemplate(RedisConnectionFactory factory) {
-
         RedisTemplate<String, List<HistoryMessage>> template = new RedisTemplate<>();
         template.setConnectionFactory(factory);
         // 使用 Jackson2JsonRedisSerializer 序列化 value

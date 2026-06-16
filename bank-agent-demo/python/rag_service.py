@@ -17,7 +17,7 @@ app = FastAPI()
 # 存放文档的文件夹路径
 DOCS_FOLDER = "./bank_docs"
 # 向量库持久化目录（可配置）
-VECTOR_DB_DIR = "./bank_vector_db"
+VECTOR_DB_DIR = "../bank_vector_db"
 
 # ---------- 定义请求和响应的数据结构 ----------
 # 历史对话消息结构

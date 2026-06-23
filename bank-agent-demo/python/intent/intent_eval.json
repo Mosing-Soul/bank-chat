@@ -1,0 +1,25 @@
+[
+  {"input": "金葵花客户达标标准是什么", "expected": "knowledge_qa", "case_type": "clear"},
+  {"input": "反洗钱法对临时冻结的时限规定", "expected": "knowledge_qa", "case_type": "clear"},
+  {"input": "公募产品半年度报告什么时候披露", "expected": "knowledge_qa", "case_type": "clear"},
+  {"input": "建设银行星级客户如何划分", "expected": "knowledge_qa", "case_type": "clear"},
+  {"input": "资产管理产品信息披露有哪些要求", "expected": "knowledge_qa", "case_type": "clear"},
+
+  {"input": "现在Au99.99金价多少", "expected": "price_query", "case_type": "clear"},
+  {"input": "稳健增利180天最新净值是多少", "expected": "price_query", "case_type": "clear"},
+  {"input": "黄金近一周走势怎么样", "expected": "price_query", "case_type": "clear"},
+  {"input": "理财产品净值查询", "expected": "price_query", "case_type": "clear"},
+  {"input": "黄金今天涨了吗", "expected": "price_query", "case_type": "clear"},
+
+  {"input": "你好", "expected": "chitchat", "case_type": "clear"},
+  {"input": "帮我订明天的机票", "expected": "chitchat", "case_type": "clear"},
+  {"input": "今天天气怎么样", "expected": "chitchat", "case_type": "clear"},
+  {"input": "你叫什么名字", "expected": "chitchat", "case_type": "clear"},
+  {"input": "讲个笑话", "expected": "chitchat", "case_type": "clear"},
+
+  {"input": "金葵花客户买黄金有优惠吗，现在金价多少", "expected": "knowledge_qa", "case_type": "boundary"},
+  {"input": "最近金价走势和理财净值", "expected": "price_query", "case_type": "boundary"},
+  {"input": "你能帮我查客户信息吗", "expected": "chitchat", "case_type": "boundary"},
+  {"input": "黄金投资有什么风险", "expected": "knowledge_qa", "case_type": "boundary"},
+  {"input": "我想了解一下", "expected": "chitchat", "case_type": "boundary"}
+]

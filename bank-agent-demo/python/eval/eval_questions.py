@@ -124,7 +124,7 @@ def evaluate_end_to_end(questions):
             status = "✅ 拦截" if triggered else "❌ 未拦截（幻觉风险）"
             print(f"[Boundary] {status}: {q['question'][:50]}...")
 
-        elif q["type"] == "Recall@K":
+        elif q["type"] == "E2E":
             # 端到端准确率：LLM-as-Judge
             is_correct = llm_judge(q["question"], q["answer"], answer)
             results["recall"].append(is_correct)

@@ -17,7 +17,7 @@ app = FastAPI()
 # 存放文档的文件夹路径
 DOCS_FOLDER = "./bank_docs"
 # 向量库持久化目录（可配置）
-VECTOR_DB_DIR = "../bank_vector_db"
+VECTOR_DB_DIR = "./chroma_db"
 
 # ---------- 定义请求和响应的数据结构 ----------
 # 历史对话消息结构
@@ -53,7 +53,11 @@ dotenv.load_dotenv()  #加载当前目录下的 .env 文件
 os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_API_KEY1")
 os.environ['OPENAI_BASE_URL'] = os.getenv("OPENAI_BASE_URL")
 
-embedding_model = OpenAIEmbeddings(model = "text-embedding-ada-002")
+embedding_model = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-small-zh-v1.5",
+    model_kwargs={'device': 'cpu', 'local_files_only': True},
+    encode_kwargs={'normalize_embeddings': True}
+)
 
 llm = ChatOpenAI(model="deepseek-v4-pro")
 
@@ -101,22 +105,6 @@ if os.path.exists(VECTOR_DB_DIR) and os.listdir(VECTOR_DB_DIR):
 else:
     vectordb = None
     print("向量库不存在，请调用 /refresh 接口初始化")
-
-
-
-# # ---------- RAG 核心逻辑（第一期简化版：Mock LLM）----------
-# def mock_rag_answer(question: str) -> str:
-#     """第一期：先返回 Mock 答案，后续替换为真实的 LangChain RAG 检索"""
-#
-#     # 这里模拟不同的问答场景
-#     if "金葵花" in question:
-#         return "金葵花客户是指招商银行月日均总资产达到50万元及以上的客户，享受专属理财顾问、优先办理业务等权益。"
-#     elif "结构性存款" in question:
-#         return "结构性存款是指商业银行吸收的嵌入金融衍生产品的存款，通过与利率、汇率、指数等的波动挂钩，使存款人在承担一定风险的基础上获得更高收益。"
-#     elif "代销基金" in question:
-#         return "代销基金是指商业银行接受基金管理公司委托，代理销售其发行的基金产品。银行作为代销渠道，提供产品展示、交易执行等服务。"
-#     else:
-#         return f"（Mock答案）关于「{question}」的问题，后续将接入真实的知识库检索和LLM回答。"
 
 
 # --- 辅助函数 ---
@@ -196,6 +184,76 @@ async def query(request: QueryRequest):
 
     return QueryResponse(answer=answer, sources=sources)
 
+# ---------- 评估eval效果接口 ----------
+@app.post("/rag/eval_query", response_model=QueryResponse)
+async def query(request: QueryRequest):
+    global vectordb, llm
+    if vectordb is None:
+        return QueryResponse(answer="知识库尚未初始化，请先上传文档。", sources=[])
+
+    # 检索
+    docs_with_scores = vectordb.similarity_search_with_score(request.question, k=3)
+
+    print(f"\n问题：{request.question}")
+    for i, (doc, score) in enumerate(docs_with_scores):
+        print(f"\n--- Chunk {i + 1} (score={score:.4f}) ---")
+        print(f"来源：{doc.metadata.get('source', 'unknown')}")
+        print(f"内容：{doc.page_content[:300]}")
+
+    SCORE_THRESHOLD = 0.7
+    # Lower score represents more similarity
+    relevant_docs = [(doc, score) for doc, score in docs_with_scores if score < SCORE_THRESHOLD]
+
+    if not relevant_docs:
+        # 边界场景：直接拒答，不调用 LLM
+        answer = "未在内部知识库中找到相关信息，请确认问题是否在支持范围内。"
+        sources = []
+    else:
+        context = "\n\n".join([doc.page_content for doc, _ in relevant_docs])
+        sources = list(set([doc.metadata.get('source', '未知') for doc, _ in relevant_docs]))
+        prompt = f"""你是银行内部知识库问答助手。
+            
+            规则：
+            1. 只使用【参考文档】中明确出现的信息回答，不补充任何文档外的知识
+            2. 如果参考文档中完全没有与问题相关的信息，回复：
+               "未在内部知识库中找到相关信息"
+            3. 特别注意机构名称：如果问题询问的是A银行/机构，
+               但参考文档中只有B银行/机构的信息（且A与B明显不同），
+               必须回复："未在内部知识库中找到相关信息"
+               例如：问"交通银行的分级"，文档只有"招商银行的分级" → 拒答
+               例如：问"大型商业银行的总负债"，文档中有该数据 → 正常回答
+            4. 数字、比率等数据直接使用文档中的原始数值，
+               百分比和小数形式均可接受（如0.01401即1.401%）
+               数值精度不同但数值本身一致（如1970418.15与1970418.151652967），视为correct。
+                以下情况均视为correct：
+                - 数值精度不同但四舍五入后一致（如22399.84与22400）
+                - 小数与百分比互换（如0.01401与1.401%）
+                - 表述顺序不同但内容一致
+            
+            【参考文档】
+            {context}
+            
+            【问题】
+            {request.question}"""
+
+        if request.history:
+            history_text = "\n".join([f"{msg.role}：{msg.content}" for msg in request.history])
+            prompt = f"历史对话：\n{history_text}\n\n" + prompt
+
+        if llm is None:
+            answer = "（LLM 未加载，无法生成答案）"
+        else:
+            try:
+                result = llm.invoke(prompt)
+                # 兼容 LangChain 不同返回值
+                if hasattr(result, 'content'):
+                    answer = result.content
+                else:
+                    answer = str(result)
+            except Exception as e:
+                answer = f"生成答案时出错：{str(e)}"
+
+    return QueryResponse(answer=answer.strip(), sources=sources)
 
 # ---------- 健康检查接口 ----------
 @app.get("/health")

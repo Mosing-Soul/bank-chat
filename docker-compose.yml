@@ -20,6 +20,9 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - JAVA_SKILL_BASE_URL=http://java-backend:8080/internal/skills
+      - INTERNAL_SKILL_API_KEY=local-dev-internal-key
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
     volumes:
       - ./models:/root/.cache/huggingface
       - ./chroma_db:/app/chroma_db
@@ -37,6 +40,7 @@ services:
       - SPRING_PROFILES_ACTIVE=docker
       - REDIS_HOST=redis
       - RAG_SERVICE_URL=http://python-rag:8000/rag/query
+      - AI_CHAT_URL=http://python-rag:8000/ai/chat/invoke
     networks:
       - bank-net
     depends_on:

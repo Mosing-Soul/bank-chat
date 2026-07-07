@@ -12,14 +12,9 @@ const createId = () => {
 };
 
 export const getOrCreateSessionId = () => {
-  const existingSessionId = sessionStorage.getItem(SESSION_ID_KEY);
-
-  if (existingSessionId) {
-    return existingSessionId;
-  }
-
   const sessionId = createId();
   sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+  sessionStorage.removeItem(MESSAGES_KEY);
   return sessionId;
 };
 
@@ -35,22 +30,14 @@ export const resetSession = () => {
 };
 
 export const loadMessages = (): ChatMessage[] => {
-  const rawMessages = sessionStorage.getItem(MESSAGES_KEY);
-
-  if (!rawMessages) {
-    return [];
-  }
-
-  try {
-    const messages = JSON.parse(rawMessages);
-    return Array.isArray(messages) ? messages : [];
-  } catch {
-    return [];
-  }
+  sessionStorage.removeItem(MESSAGES_KEY);
+  return [];
 };
 
 export const saveMessages = (messages: ChatMessage[]) => {
-  sessionStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+  if (messages.length === 0) {
+    sessionStorage.removeItem(MESSAGES_KEY);
+  }
 };
 
 export const createMessageId = createId;

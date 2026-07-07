@@ -1,53 +1,138 @@
 package org.gundy.chat.controller;
 
+import lombok.extern.slf4j.Slf4j;
 import org.gundy.chat.entity.ChatRequest;
 import org.gundy.chat.entity.ChatResponse;
 import org.gundy.chat.entity.HistoryMessage;
-import org.gundy.chat.entity.RagResponse;
+import org.gundy.chat.entity.intent.IntentRouteResult;
+import org.gundy.chat.service.AiChatService;
+import org.gundy.chat.service.DialogStateMachineService;
+import org.gundy.chat.service.DialogStateService;
+import org.gundy.chat.service.IntentRouterService;
 import org.gundy.chat.service.MemoryService;
-import org.gundy.chat.service.RagService;
-//import org.gundy.chat.service.TempMemoryService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.gundy.chat.statemachine.SkillTransitionResult;
+import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/chat")
 public class ChatController {
+    private final MemoryService memoryService;
+    private final AiChatService aiChatService;
+    private final DialogStateService dialogStateService;
+    private final DialogStateMachineService dialogStateMachineService;
+    private final IntentRouterService intentRouterService;
 
-    @Autowired
-    private MemoryService memoryService;
-
-//    @Autowired
-//    private TempMemoryService memoryService;
-
-    @Autowired
-    private RagService ragService;   // 原有的调用 Python 服务
+    public ChatController(MemoryService memoryService,
+                          AiChatService aiChatService,
+                          DialogStateService dialogStateService,
+                          DialogStateMachineService dialogStateMachineService,
+                          IntentRouterService intentRouterService) {
+        this.memoryService = memoryService;
+        this.aiChatService = aiChatService;
+        this.dialogStateService = dialogStateService;
+        this.dialogStateMachineService = dialogStateMachineService;
+        this.intentRouterService = intentRouterService;
+    }
 
     @PostMapping
-    public ResponseEntity<ChatResponse> chat(@RequestBody ChatRequest request) {
-        String sessionId = request.getSessionId();
-        if (sessionId == null || sessionId.isEmpty()) {
-            sessionId = UUID.randomUUID().toString();
+    public ResponseEntity<ChatResponse> chat(@RequestBody ChatRequest request,
+                                             @RequestHeader(value = "X-Trace-Id", required = false) String requestTraceId) {
+        String traceId = hasText(requestTraceId) ? requestTraceId : UUID.randomUUID().toString();
+        MDC.put("traceId", traceId);
+        long start = System.currentTimeMillis();
+        try {
+            String sessionId = hasText(request.getSessionId()) ? request.getSessionId() : UUID.randomUUID().toString();
+            String userMessage = request.effectiveMessage();
+            if (!hasText(userMessage)) {
+                return ResponseEntity.badRequest().body(ChatResponse.friendlyError(
+                        traceId, sessionId, "请输入要咨询或办理的内容。"));
+            }
+
+            org.gundy.chat.entity.dialog.DialogState dialogState = dialogStateService.getState(sessionId);
+            IntentRouteResult route = intentRouterService.route(dialogState, userMessage,
+                    request.getRequestedSkill(), request.forceSkill());
+            String effectiveRequestedSkill = hasText(route.getRequestedSkill()) ? route.getRequestedSkill() : request.getRequestedSkill();
+            boolean effectiveForceSkill = request.forceSkill() || route.isForceSkill();
+
+            SkillTransitionResult transition = dialogStateMachineService.handle(
+                    traceId, sessionId, dialogState, userMessage,
+                    effectiveRequestedSkill, effectiveForceSkill);
+            if (transition != null && transition.isHandled()) {
+                ChatResponse response = new ChatResponse();
+                response.setTraceId(traceId);
+                response.setSessionId(sessionId);
+                response.setIntent("MESSAGE_SEND");
+                response.setConfidence(0.95D);
+                response.setAnswer(transition.getAnswer());
+                response.setData(transition.getData());
+                response.setRequiresConfirmation(transition.isRequiresConfirmation());
+                response.setConfirmation(transition.getConfirmation());
+                response.setDialogState(transition.getDialogState());
+                if (transition.isTerminal()) {
+                    dialogStateService.clearState(sessionId);
+                } else {
+                    dialogStateService.saveState(sessionId, transition.getDialogState());
+                }
+                if (hasText(response.getAnswer())) {
+                    memoryService.addConversation(sessionId, userMessage, response.getAnswer());
+                }
+                log.info("sessionId={}, intent={}, status={}, durationMs={}",
+                        sessionId, response.getIntent(), "STATE_MACHINE",
+                        System.currentTimeMillis() - start);
+                return ResponseEntity.ok(response);
+            }
+            boolean clearStateBeforeAi = (transition != null && transition.isClearState()) || route.isClearHistory();
+            if (clearStateBeforeAi) {
+                dialogStateService.clearState(sessionId);
+            }
+
+            List<HistoryMessage> history = clearStateBeforeAi
+                    ? Collections.<HistoryMessage>emptyList()
+                    : memoryService.getHistory(sessionId);
+            ChatResponse response = aiChatService.invoke(traceId, sessionId, userMessage, history,
+                    effectiveRequestedSkill, effectiveForceSkill, route.getRequestedSkill(),
+                    route.getConfidence(), route.entityMap());
+            if (response == null) {
+                response = ChatResponse.friendlyError(traceId, sessionId, "AI 服务暂时不可用，请稍后再试。");
+            }
+            response.setTraceId(hasText(response.getTraceId()) ? response.getTraceId() : traceId);
+            response.setSessionId(hasText(response.getSessionId()) ? response.getSessionId() : sessionId);
+            if (hasText(response.getAnswer()) && response.getError() == null) {
+                memoryService.addConversation(sessionId, userMessage, response.getAnswer());
+            }
+            log.info("sessionId={}, intent={}, status={}, durationMs={}",
+                    sessionId, response.getIntent(), response.getError() == null ? "SUCCESS" : "ERROR",
+                    System.currentTimeMillis() - start);
+            return ResponseEntity.ok(response);
+        } catch (ResourceAccessException ex) {
+            log.warn("python chat timeout or unavailable, durationMs={}", System.currentTimeMillis() - start);
+            return ResponseEntity.ok(ChatResponse.friendlyError(traceId, safeSessionId(request), "AI 服务响应超时或不可用，请稍后再试。"));
+        } catch (RestClientException ex) {
+            log.warn("python chat call failed, durationMs={}", System.currentTimeMillis() - start);
+            return ResponseEntity.ok(ChatResponse.friendlyError(traceId, safeSessionId(request), "AI 服务调用失败，请稍后再试。"));
+        } finally {
+            MDC.remove("traceId");
         }
-        String question = request.getQuestion();
+    }
 
-        // 1. 获取历史对话
-        List<HistoryMessage> history = memoryService.getHistory(sessionId);
+    private String safeSessionId(ChatRequest request) {
+        return request != null && hasText(request.getSessionId()) ? request.getSessionId() : UUID.randomUUID().toString();
+    }
 
-        // 2. 调用 Python RAG 服务（携带历史）
-        RagResponse ragResp = ragService.query(question, sessionId, history);
-
-        // 3. 保存新对话
-        memoryService.addConversation(sessionId, question, ragResp.getAnswer());
-
-        // 4. 返回
-        return ResponseEntity.ok(new ChatResponse(ragResp.getAnswer(), ragResp.getSources(), sessionId));
+    private boolean hasText(String value) {
+        return value != null && value.trim().length() > 0;
     }
 }

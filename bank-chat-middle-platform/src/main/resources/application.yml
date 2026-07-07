@@ -1,6 +1,10 @@
 rag:
   python:
-    url: ${RAG_SERVICE_URL:http://localhost:8000/rag/query}   # 根据实际部署修改
+    url: ${RAG_SERVICE_URL:http://localhost:8000/rag/query}
+
+ai:
+  chat:
+    url: ${AI_CHAT_URL:http://localhost:8000/ai/chat/invoke}
 
 spring:
   redis:
@@ -15,3 +19,13 @@ spring:
 
 server:
   port: 8080
+
+bank:
+  skills:
+    customer:
+      core-simulator:
+        latency-ms: ${CORE_BANK_SIMULATOR_LATENCY_MS:30}
+    internal:
+      api-key: ${INTERNAL_SKILL_API_KEY:local-dev-internal-key}
+      api-key-header: X-Internal-Api-Key
+      message-operation-ttl: PT10M

@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com
 
 COPY . .
 
+WORKDIR /app/python
+
 EXPOSE 8000
 
 #CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "rag_service:app"]

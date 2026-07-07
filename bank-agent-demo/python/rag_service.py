@@ -9,15 +9,42 @@ import uvicorn
 from langchain_community.embeddings import HuggingFaceEmbeddings, OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 import os
+import logging
+from pathlib import Path
 
 from document_loader import load_document
+from ai_chat_models import AiChatError, AiChatRequest, AiChatResponse, IntentType, SkillRequest
+from external_search_client import ExternalSearchClient, ExternalSearchConfigError
+from intent.structured_intent import IntentRecognitionService
+from java_skill_client import JavaSkillClient
+from skill_handlers import (
+    CustomerAumSkill,
+    ExternalModelApiSkill,
+    GeneralChatSkill,
+    KnowledgeRagSkill,
+    MessagePreviewSkill,
+    extract_pending_operation_id,
+    has_open_message_flow,
+    is_cancel_message,
+    is_confirm_message,
+    is_revision_message,
+)
+from skill_router import SkillRouter
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 
-# 存放文档的文件夹路径
-DOCS_FOLDER = "./bank_docs"
-# 向量库持久化目录（可配置）
-VECTOR_DB_DIR = "./chroma_db"
+BASE_DIR = Path(__file__).resolve().parent
+APP_DIR = BASE_DIR.parent
+
+# 存放文档的文件夹路径。默认指向 bank-agent-demo/bank_docs，避免受启动目录影响。
+DOCS_FOLDER = os.getenv("BANK_DOCS_FOLDER", str(APP_DIR / "bank_docs"))
+
+# 向量库持久化目录（可配置）。容器部署优先使用 /app/chroma_db；本地开发使用 python/chroma_db。
+DEFAULT_VECTOR_DB_DIR = APP_DIR / "chroma_db" if (APP_DIR / "chroma_db").exists() else BASE_DIR / "chroma_db"
+VECTOR_DB_DIR = os.getenv("VECTOR_DB_DIR", str(DEFAULT_VECTOR_DB_DIR))
+RAG_SCORE_THRESHOLD = float(os.getenv("RAG_SCORE_THRESHOLD", "0.7"))
+RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 
 # ---------- 定义请求和响应的数据结构 ----------
 # 历史对话消息结构
@@ -60,6 +87,12 @@ embedding_model = HuggingFaceEmbeddings(
 )
 
 llm = ChatOpenAI(model="deepseek-v4-pro")
+
+try:
+    external_search_client = ExternalSearchClient()
+except ExternalSearchConfigError as exc:
+    external_search_client = None
+    logger.warning("external search client disabled: %s", exc)
 
 
 def build_vector_store(docs_folder):
@@ -122,68 +155,114 @@ def build_prompt(question: str, history: List[HistoryMessage], context: str) -> 
     prompt += f"用户：{question}\n助手："
     return prompt
 
+def format_docs_for_prompt(docs_with_scores) -> str:
+    if not docs_with_scores:
+        return "无"
+    chunks = []
+    for index, (doc, score) in enumerate(docs_with_scores, start=1):
+        source = doc.metadata.get("source", "unknown")
+        page = doc.metadata.get("page")
+        page_text = f"，页码/位置：{page}" if page is not None else ""
+        chunks.append(
+            f"【文档{index}】来源：{source}{page_text}，相关度分数：{score:.4f}\n{doc.page_content}"
+        )
+    return "\n\n".join(chunks)
+
+
+def unique_sources(docs_with_scores) -> List[str]:
+    sources = []
+    for doc, _ in docs_with_scores:
+        source = doc.metadata.get("source", "unknown")
+        if source not in sources:
+            sources.append(source)
+    return sources
+
+
+def build_rag_answer_prompt(question: str, history, relevant_docs, candidate_docs) -> str:
+    history_text = ""
+    if history:
+        history_text = "\n".join([f"{msg.role}: {msg.content}" for msg in history])
+        history_text = f"历史对话：\n{history_text}\n\n"
+
+    if relevant_docs:
+        internal_context = format_docs_for_prompt(relevant_docs)
+        candidate_context = "无"
+        internal_instruction = "已命中行内知识库文档。请优先基于【命中的行内文档】回答，并明确列出信息来自哪些文档。"
+    else:
+        internal_context = "暂无高相关行内文档。"
+        candidate_context = format_docs_for_prompt(candidate_docs)
+        internal_instruction = (
+            "未命中高相关行内文档。仍需调用大模型回答，但必须明确说明：行内文档暂无相关文档。"
+            "如果候选片段也无法支持问题，不要把候选片段包装成行内依据。"
+        )
+
+    return (
+        "你是银行客户经理智能助手。请按固定结构回答用户问题：\n"
+        "1. 【行内文档结论】：如果命中行内文档，先给基于行内文档的结论，并在句末标注来源文档名；"
+        "如果未命中，写“暂无相关文档”。\n"
+        "2. 【大模型补充】：用一到三句话给通用补充或下一步建议，并明确这部分不是行内文档依据。\n"
+        "3. 【来源】：列出命中的行内文档名；没有则写“无”。\n"
+        "不要编造文档来源，不要把未命中的候选片段说成已命中文档。\n\n"
+        f"{internal_instruction}\n\n"
+        f"{history_text}"
+        f"命中的行内文档：\n{internal_context}\n\n"
+        f"低相关候选片段（仅供判断是否暂无相关文档，不作为行内依据）：\n{candidate_context}\n\n"
+        f"用户问题：{question}\n\n"
+        "请输出："
+    )
+
 # ---------- REST API 接口 ----------
+def perform_rag_query(question: str, session_id: str, history=None) -> QueryResponse:
+    global vectordb, llm
+    history = history or []
+    if vectordb is None:
+        prompt = build_rag_answer_prompt(question, history, [], [])
+        try:
+            result = llm.invoke(prompt) if llm else None
+            model_answer = (
+                result.content
+                if hasattr(result, "content")
+                else str(result)
+                if result
+                else "【行内文档结论】暂无相关文档。\n\n【大模型补充】大模型暂不可用。\n\n【来源】无"
+            )
+        except Exception as exc:
+            logger.warning("rag llm failed without vectordb: %s", type(exc).__name__)
+            model_answer = "【行内文档结论】暂无相关文档。\n\n【大模型补充】大模型暂不可用。\n\n【来源】无"
+        return QueryResponse(answer=model_answer.strip(), sources=[])
+
+    docs_with_scores = vectordb.similarity_search_with_score(question, k=RAG_TOP_K)
+    relevant_docs = [(doc, score) for doc, score in docs_with_scores if score < RAG_SCORE_THRESHOLD]
+    candidate_docs = [] if relevant_docs else docs_with_scores[: min(len(docs_with_scores), 3)]
+    sources = unique_sources(relevant_docs)
+    prompt = build_rag_answer_prompt(question, history, relevant_docs, candidate_docs)
+
+    try:
+        result = llm.invoke(prompt)
+        answer = result.content if hasattr(result, "content") else str(result)
+    except Exception as exc:
+        logger.warning("rag llm failed: %s", type(exc).__name__)
+        if relevant_docs:
+            source_text = "、".join(sources)
+            answer = f"【行内文档结论】已在行内文档中找到相关片段，但大模型整理暂时不可用。\n\n【大模型补充】暂无。\n\n【来源】{source_text}"
+        else:
+            answer = "【行内文档结论】暂无相关文档。\n\n【大模型补充】大模型暂不可用，请稍后再试。\n\n【来源】无"
+    return QueryResponse(answer=answer.strip(), sources=sources)
+
+def build_skill_router() -> SkillRouter:
+    java_client = JavaSkillClient()
+    return SkillRouter({
+        IntentType.KNOWLEDGE_QA: KnowledgeRagSkill(perform_rag_query),
+        IntentType.CUSTOMER_AUM_QUERY: CustomerAumSkill(java_client),
+        IntentType.EXTERNAL_API_QUERY: ExternalModelApiSkill(external_search_client, llm),
+        IntentType.MESSAGE_SEND: MessagePreviewSkill(java_client),
+        IntentType.GENERAL_CHAT: GeneralChatSkill(llm),
+    })
+
+
 @app.post("/rag/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
-    global vectordb
-    if vectordb is None:
-        return QueryResponse(answer="知识库尚未初始化，请先上传文档。", sources=[])
-
-    # 相似度阈值（根据模型不同可调整）
-    SCORE_THRESHOLD = 0.5
-
-    # 执行相似度搜索，返回 (document, score) 列表
-    docs_with_scores = vectordb.similarity_search_with_score(request.question, k=3)
-
-    print("得分详情：")
-    for doc, score in docs_with_scores:
-        print(f"得分: {score}, 片段预览: {doc.page_content[:100]}...")
-
-    # 过滤低分结果
-    relevant_docs = [(doc, score) for doc, score in docs_with_scores if score < SCORE_THRESHOLD]
-
-    if not relevant_docs:
-        # ----- 情况A：未找到相关文档 -----
-        # 构造 Prompt，要求 LLM 用自身知识回答，并注明非行内来源
-        prompt = (
-            "你是一个通用 AI 助手。用户的问题没有在银行内部知识库中找到匹配的答案。\n"
-            "请根据你自己的知识回答用户的问题，并在回答的开头注明“（非行内文档来源）”。\n\n"
-            f"用户问题：{request.question}\n\n"
-            "回答："
-        )
-        # 在 prompt 中加入历史对话
-        if request.history:
-            history_text = "\n".join([f"{msg.role}：{msg.content}" for msg in request.history])
-            prompt = f"历史对话：\n{history_text}\n\n" + prompt
-        raw_answer = llm.invoke(prompt) if llm else "（LLM 未加载，无法生成通用回答）"
-        # 强制加上标注（防止 LLM 忘记）
-        if not raw_answer.content.startswith("（非行内文档来源）"):
-            answer = "（非行内文档来源）" + raw_answer.content
-        else:
-            answer = raw_answer.content
-        sources = []  # 无知识库来源
-    else:
-        # ----- 情况B：找到相关文档，基于文档回答 -----
-        context = "\n\n".join([doc.page_content for doc, _ in relevant_docs])
-        sources = list(set([doc.metadata.get('source', '未知') for doc, _ in relevant_docs]))
-        # 构建强调文档优先的 Prompt
-        prompt = (
-            "你是一位专业的银行客户经理助手。请严格依据以下“参考资料”回答用户的问题。\n"
-            "如果参考资料中不包含相关信息，请明确说“未找到相关信息”。不要编造答案。\n\n"
-            f"参考资料：\n{context}\n\n"
-            f"用户问题：{request.question}\n\n"
-            "回答："
-        )
-        # 在 prompt 中加入历史对话
-        if request.history:
-            history_text = "\n".join([f"{msg.role}：{msg.content}" for msg in request.history])
-            prompt = f"历史对话：\n{history_text}\n\n" + prompt
-
-        answer = llm.invoke(prompt) if llm else "（LLM 未加载，无法生成答案）"
-        answer = answer.content
-
-    return QueryResponse(answer=answer, sources=sources)
-
+    return perform_rag_query(request.question, request.session_id, request.history)
 # ---------- 评估eval效果接口 ----------
 @app.post("/rag/eval_query", response_model=QueryResponse)
 async def query(request: QueryRequest):
@@ -192,7 +271,7 @@ async def query(request: QueryRequest):
         return QueryResponse(answer="知识库尚未初始化，请先上传文档。", sources=[])
 
     # 检索
-    docs_with_scores = vectordb.similarity_search_with_score(request.question, k=3)
+    docs_with_scores = vectordb.similarity_search_with_score(request.question, k=RAG_TOP_K)
 
     print(f"\n问题：{request.question}")
     for i, (doc, score) in enumerate(docs_with_scores):
@@ -200,9 +279,8 @@ async def query(request: QueryRequest):
         print(f"来源：{doc.metadata.get('source', 'unknown')}")
         print(f"内容：{doc.page_content[:300]}")
 
-    SCORE_THRESHOLD = 0.7
     # Lower score represents more similarity
-    relevant_docs = [(doc, score) for doc, score in docs_with_scores if score < SCORE_THRESHOLD]
+    relevant_docs = [(doc, score) for doc, score in docs_with_scores if score < RAG_SCORE_THRESHOLD]
 
     if not relevant_docs:
         # 边界场景：直接拒答，不调用 LLM
@@ -261,6 +339,69 @@ async def health():
     return {"status": "ok"}
 
 # ---------- 更换文档目录或新增文档时，调用此接口重新加载所有文档 ----------
+@app.post("/ai/chat/invoke", response_model=AiChatResponse)
+async def ai_chat_invoke(request: AiChatRequest):
+    intent_service = IntentRecognitionService(llm)
+    intent = intent_service.recognize(request.message)
+    forced_intent = forced_intent_from_skill(request.requestedSkill) if request.forceSkill else None
+    effective_history = [] if forced_intent else request.history
+    if forced_intent:
+        intent.intent = forced_intent
+        intent.confidence = 0.98
+        intent.reason = "forced by requestedSkill"
+    elif (
+        extract_pending_operation_id(request.history)
+        and (is_confirm_message(request.message) or is_cancel_message(request.message) or is_revision_message(request.message))
+    ) or has_open_message_flow(request.history):
+        intent.intent = IntentType.MESSAGE_SEND
+        intent.confidence = max(intent.confidence, 0.95)
+        intent.reason = "pending message confirmation flow"
+    router = build_skill_router()
+    skill_request = SkillRequest(
+        trace_id=request.traceId,
+        session_id=request.sessionId,
+        user_message=request.message,
+        intent=intent.intent,
+        entities=intent.entities,
+        history=effective_history,
+    )
+    result, call = router.route(skill_request)
+    error = None
+    if not result.success:
+        error = AiChatError(code=result.error_code or "SKILL_ERROR", message=result.error_message or "skill failed")
+    return AiChatResponse(
+        traceId=request.traceId,
+        sessionId=request.sessionId,
+        intent=intent.intent,
+        confidence=intent.confidence,
+        answer=result.answer or "请说明您想查询产品规则、客户资产、黄金行情，还是需要生成客户消息。",
+        data=result.data,
+        citations=result.citations,
+        sources=[citation.source for citation in result.citations],
+        requiresConfirmation=result.requires_confirmation,
+        confirmation=result.confirmation,
+        skillCalls=[call],
+        error=error,
+    )
+
+
+def forced_intent_from_skill(skill: Optional[str]) -> Optional[IntentType]:
+    if not skill:
+        return None
+    value = skill.strip().upper()
+    mapping = {
+        "CUSTOMER_AUM": IntentType.CUSTOMER_AUM_QUERY,
+        "AUM": IntentType.CUSTOMER_AUM_QUERY,
+        "GOLD_PRICE": IntentType.EXTERNAL_API_QUERY,
+        "GOLD": IntentType.EXTERNAL_API_QUERY,
+        "RAG_QUERY": IntentType.KNOWLEDGE_QA,
+        "RULE_QUERY": IntentType.KNOWLEDGE_QA,
+        "MESSAGE_SEND": IntentType.MESSAGE_SEND,
+        "MESSAGE": IntentType.MESSAGE_SEND,
+    }
+    return mapping.get(value)
+
+
 @app.post("/refresh")
 async def refresh_vector_store():
     global vectordb

@@ -8,8 +8,10 @@ import org.gundy.chat.entity.intent.IntentRouteResult;
 import org.gundy.chat.service.AiChatService;
 import org.gundy.chat.service.DialogStateMachineService;
 import org.gundy.chat.service.DialogStateService;
+import org.gundy.chat.service.IntentClarificationService;
 import org.gundy.chat.service.IntentRouterService;
 import org.gundy.chat.service.MemoryService;
+import org.gundy.chat.service.SkillConfigService;
 import org.gundy.chat.statemachine.SkillTransitionResult;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
@@ -33,18 +35,24 @@ public class ChatController {
     private final AiChatService aiChatService;
     private final DialogStateService dialogStateService;
     private final DialogStateMachineService dialogStateMachineService;
+    private final IntentClarificationService intentClarificationService;
     private final IntentRouterService intentRouterService;
+    private final SkillConfigService skillConfigService;
 
     public ChatController(MemoryService memoryService,
                           AiChatService aiChatService,
                           DialogStateService dialogStateService,
                           DialogStateMachineService dialogStateMachineService,
-                          IntentRouterService intentRouterService) {
+                          IntentClarificationService intentClarificationService,
+                          IntentRouterService intentRouterService,
+                          SkillConfigService skillConfigService) {
         this.memoryService = memoryService;
         this.aiChatService = aiChatService;
         this.dialogStateService = dialogStateService;
         this.dialogStateMachineService = dialogStateMachineService;
+        this.intentClarificationService = intentClarificationService;
         this.intentRouterService = intentRouterService;
+        this.skillConfigService = skillConfigService;
     }
 
     @PostMapping
@@ -104,12 +112,23 @@ public class ChatController {
                     : memoryService.getHistory(sessionId);
             ChatResponse response = aiChatService.invoke(traceId, sessionId, userMessage, history,
                     effectiveRequestedSkill, effectiveForceSkill, route.getRequestedSkill(),
-                    route.getConfidence(), route.entityMap());
+                    route.getConfidence(), route.entityMap(), route.getDialogAct(),
+                    skillConfigService.examplesPayload());
             if (response == null) {
                 response = ChatResponse.friendlyError(traceId, sessionId, "AI 服务暂时不可用，请稍后再试。");
             }
             response.setTraceId(hasText(response.getTraceId()) ? response.getTraceId() : traceId);
             response.setSessionId(hasText(response.getSessionId()) ? response.getSessionId() : sessionId);
+
+            ChatResponse clarification = intentClarificationService.maybeClarify(
+                    traceId, sessionId, userMessage, route, effectiveForceSkill, response);
+            if (clarification != null) {
+                log.info("sessionId={}, intent={}, status={}, durationMs={}",
+                        sessionId, clarification.getIntent(), "CLARIFICATION",
+                        System.currentTimeMillis() - start);
+                return ResponseEntity.ok(clarification);
+            }
+
             if (hasText(response.getAnswer()) && response.getError() == null) {
                 memoryService.addConversation(sessionId, userMessage, response.getAnswer());
             }

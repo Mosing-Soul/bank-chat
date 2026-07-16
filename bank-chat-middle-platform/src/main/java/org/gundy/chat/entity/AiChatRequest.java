@@ -16,6 +16,8 @@ public class AiChatRequest {
     private String routerIntent;
     private Double routerConfidence;
     private Map<String, Object> entities;
+    private String dialogAct;
+    private Map<String, Object> skillExamples;
 
     public String getTraceId() { return traceId; }
     public void setTraceId(String traceId) { this.traceId = traceId; }
@@ -35,4 +37,8 @@ public class AiChatRequest {
     public void setRouterConfidence(Double routerConfidence) { this.routerConfidence = routerConfidence; }
     public Map<String, Object> getEntities() { return entities; }
     public void setEntities(Map<String, Object> entities) { this.entities = entities; }
+    public String getDialogAct() { return dialogAct; }
+    public void setDialogAct(String dialogAct) { this.dialogAct = dialogAct; }
+    public Map<String, Object> getSkillExamples() { return skillExamples; }
+    public void setSkillExamples(Map<String, Object> skillExamples) { this.skillExamples = skillExamples; }
 }

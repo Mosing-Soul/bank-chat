@@ -91,8 +91,8 @@ class AiChatTests(unittest.TestCase):
             ("今天上海天气怎么样", IntentType.EXTERNAL_API_QUERY),
             ("给张伟发送产品到期提醒", IntentType.MESSAGE_SEND),
             ("你好，介绍一下你自己", IntentType.GENERAL_CHAT),
-            ("帮我查一下", IntentType.UNKNOWN),
-            ("查一下资料", IntentType.UNKNOWN),
+            ("帮我查一下", IntentType.GENERAL_CHAT),
+            ("查一下资料", IntentType.GENERAL_CHAT),
         ]
         for text, expected in cases:
             with self.subTest(text=text):
@@ -125,6 +125,48 @@ class AiChatTests(unittest.TestCase):
 
         result = IntentRecognitionService(llm=UnknownLlm()).recognize("反洗钱法中，临时冻结的最长时限是48小时吗？")
         self.assertEqual(result.intent, IntentType.KNOWLEDGE_QA)
+
+    def test_router_context_prior_overrides_confusing_customer_level_question(self):
+        result = IntentRecognitionService(llm=None).recognize(
+            "招行的客户等级是怎么样的",
+            router_intent="RAG_QUERY",
+            router_confidence=0.92,
+            entities={"bankNames": ["招行"], "businessTerms": ["客户等级"]},
+            dialog_act="ROUTER_SWITCH_INTENT",
+        )
+
+        self.assertEqual(result.intent, IntentType.KNOWLEDGE_QA)
+        self.assertGreaterEqual(result.confidence, 0.92)
+
+    def test_router_entities_can_fill_customer_name_for_specific_customer_query(self):
+        result = IntentRecognitionService(llm=None).recognize(
+            "查一下客户张伟的AUM",
+            router_intent="CUSTOMER_AUM",
+            router_confidence=0.88,
+            entities={"customerNames": ["张伟"]},
+            dialog_act="ROUTER_SWITCH_INTENT",
+        )
+
+        self.assertEqual(result.intent, IntentType.CUSTOMER_AUM_QUERY)
+        self.assertEqual(result.entities.customerName, "张伟")
+
+    def test_configured_examples_can_drive_intent(self):
+        result = IntentRecognitionService(llm=None).recognize(
+            "提前赎回规则是什么",
+            skill_examples={
+                "examples": [
+                    {
+                        "skillCode": "RAG_QUERY",
+                        "text": "提前赎回规则是什么",
+                        "displayText": "提前赎回规则",
+                        "confidence": 0.92,
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(result.intent, IntentType.KNOWLEDGE_QA)
+        self.assertGreaterEqual(result.confidence, 0.9)
 
     def test_router_selects_handler_and_unknown_fallback(self):
         class OkHandler:

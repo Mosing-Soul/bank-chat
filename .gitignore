@@ -55,7 +55,23 @@ ENV/
 *.egg-info/
 
 # Local data / generated knowledge stores
+bank-chat-middle-platform/data/
+*.db
+*.db-shm
+*.db-wal
+chroma_db/
+models/
 bank-agent-demo/bank_vector_db/
 bank-agent-demo/python/chroma_db/
 bank-agent-demo/bank_docs/
 bank-agent-demo/request.json
+
+# Local-only project documents (secrets, real customer data, internal endpoints)
+docs/private/
+
+# Credentials / certificates
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.local.*

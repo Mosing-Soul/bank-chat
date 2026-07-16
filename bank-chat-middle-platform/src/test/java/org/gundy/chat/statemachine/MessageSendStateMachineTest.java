@@ -59,6 +59,36 @@ class MessageSendStateMachineTest {
         verify(messageSkillService).send(any(MessageSendRequest.class));
     }
 
+    @Test
+    void fillsPurposeAfterCustomerOnlyMessageSendRequest() {
+        CustomerSkillService customerSkillService = mock(CustomerSkillService.class);
+        MessageSkillService messageSkillService = mock(MessageSkillService.class);
+        MessageSendStateMachine stateMachine = new MessageSendStateMachine(customerSkillService, messageSkillService);
+
+        when(customerSkillService.searchCustomers("\u5f20\u4f1f")).thenReturn(Collections.singletonList(
+                new CustomerSummaryResponse("C001", "\u5f20\u4f1f", CustomerLevel.PRIVATE_BANKING, RiskLevel.C3_BALANCED, true)
+        ));
+        when(messageSkillService.preview(any(MessagePreviewRequest.class))).thenReturn(preview());
+
+        SkillTransitionResult askPurposeResult = stateMachine.handle("trace-1", "session-1", null,
+                "\u7ed9\u5f20\u4f1f\u53d1\u6d88\u606f");
+
+        assertThat(askPurposeResult.isHandled()).isTrue();
+        assertThat(askPurposeResult.isRequiresConfirmation()).isFalse();
+        assertThat(askPurposeResult.getDialogState().getActiveSkill()).isEqualTo(MessageSendStateMachine.SKILL);
+        assertThat(askPurposeResult.getDialogState().getSkills().get(MessageSendStateMachine.SKILL).getSlots())
+                .containsEntry("customerName", "\u5f20\u4f1f");
+
+        SkillTransitionResult previewResult = stateMachine.handle("trace-2", "session-1",
+                askPurposeResult.getDialogState(), "\u4ea7\u54c1\u5230\u671f\u63d0\u9192");
+
+        assertThat(previewResult.isHandled()).isTrue();
+        assertThat(previewResult.isRequiresConfirmation()).isTrue();
+        assertThat(previewResult.getConfirmation()).containsEntry("customerName", "\u5f20\u4f1f");
+        verify(customerSkillService).searchCustomers(eq("\u5f20\u4f1f"));
+        verify(messageSkillService).preview(any(MessagePreviewRequest.class));
+    }
+
     private MessagePreviewResponse preview() {
         MessagePreviewResponse response = new MessagePreviewResponse();
         response.setOperationId("op-001");

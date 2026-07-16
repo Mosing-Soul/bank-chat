@@ -22,6 +22,8 @@ server:
 
 bank:
   skills:
+    config:
+      sqlite-path: ${SKILL_CONFIG_SQLITE_PATH:data/bank-chat-skill-config.db}
     customer:
       core-simulator:
         latency-ms: ${CORE_BANK_SIMULATOR_LATENCY_MS:30}

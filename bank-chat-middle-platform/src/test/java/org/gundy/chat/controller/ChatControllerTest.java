@@ -3,11 +3,13 @@ package org.gundy.chat.controller;
 import org.gundy.chat.entity.ChatResponse;
 import org.gundy.chat.entity.HistoryMessage;
 import org.gundy.chat.entity.intent.IntentRouteResult;
+import org.gundy.chat.service.AiChatService;
 import org.gundy.chat.service.DialogStateMachineService;
 import org.gundy.chat.service.DialogStateService;
-import org.gundy.chat.service.AiChatService;
+import org.gundy.chat.service.IntentClarificationService;
 import org.gundy.chat.service.IntentRouterService;
 import org.gundy.chat.service.MemoryService;
+import org.gundy.chat.service.SkillConfigService;
 import org.gundy.chat.statemachine.SkillTransitionResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +22,7 @@ import java.util.ArrayList;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -48,7 +51,13 @@ class ChatControllerTest {
     private DialogStateMachineService dialogStateMachineService;
 
     @MockBean
+    private IntentClarificationService intentClarificationService;
+
+    @MockBean
     private IntentRouterService intentRouterService;
+
+    @MockBean
+    private SkillConfigService skillConfigService;
 
     @Test
     void chatInvokesPythonAndReturnsFields() throws Exception {
@@ -61,7 +70,7 @@ class ChatControllerTest {
         response.setConfidence(0.96D);
         response.setAnswer("gold answer");
         when(aiChatService.invoke(eq("trace-1"), eq("s1"), eq("现在黄金价格是多少？"), anyList(),
-                isNull(), eq(false), isNull(), eq(0.0D), isNull())).thenReturn(response);
+                isNull(), eq(false), isNull(), anyDouble(), any(), eq("NO_DETERMINISTIC_ROUTE"), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/chat")
                         .header("X-Trace-Id", "trace-1")
@@ -85,7 +94,7 @@ class ChatControllerTest {
         ChatResponse response = ChatResponse.friendlyError("", "s1", "ok");
         response.setAnswer("answer");
         when(aiChatService.invoke(anyString(), eq("s1"), eq("你好"), anyList(),
-                isNull(), eq(false), isNull(), eq(0.0D), isNull())).thenReturn(response);
+                isNull(), eq(false), isNull(), anyDouble(), any(), eq("NO_DETERMINISTIC_ROUTE"), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/chat")
                         .contentType("application/json")
@@ -101,7 +110,7 @@ class ChatControllerTest {
                 .thenReturn(SkillTransitionResult.notHandled());
         when(memoryService.getHistory("s1")).thenReturn(new ArrayList<HistoryMessage>());
         when(aiChatService.invoke(eq("trace-timeout"), eq("s1"), eq("你好"), anyList(),
-                isNull(), eq(false), isNull(), eq(0.0D), isNull()))
+                isNull(), eq(false), isNull(), anyDouble(), any(), eq("NO_DETERMINISTIC_ROUTE"), any()))
                 .thenThrow(new ResourceAccessException("timeout"));
 
         mockMvc.perform(post("/api/chat")
@@ -123,7 +132,7 @@ class ChatControllerTest {
         response.setIntent("EXTERNAL_API_QUERY");
         response.setAnswer("gold answer");
         when(aiChatService.invoke(eq("trace-force"), eq("s1"), eq("黄金价格"), eq(new ArrayList<HistoryMessage>()),
-                eq("GOLD_PRICE"), eq(true), eq("GOLD_PRICE"), eq(0.99D), isNull())).thenReturn(response);
+                eq("GOLD_PRICE"), eq(true), eq("GOLD_PRICE"), anyDouble(), any(), eq("FRONTEND_REQUESTED_SKILL"), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/chat")
                         .header("X-Trace-Id", "trace-force")
@@ -135,7 +144,7 @@ class ChatControllerTest {
 
         verify(dialogStateService).clearState("s1");
         verify(aiChatService).invoke(eq("trace-force"), eq("s1"), eq("黄金价格"), eq(new ArrayList<HistoryMessage>()),
-                eq("GOLD_PRICE"), eq(true), eq("GOLD_PRICE"), eq(0.99D), isNull());
+                eq("GOLD_PRICE"), eq(true), eq("GOLD_PRICE"), anyDouble(), any(), eq("FRONTEND_REQUESTED_SKILL"), any());
     }
 
     @Test
@@ -146,6 +155,7 @@ class ChatControllerTest {
         route.setClearHistory(true);
         route.setConfidence(0.92D);
         route.setReason("institution knowledge query");
+        route.setDialogAct("ROUTER_SWITCH_INTENT");
         when(intentRouterService.route(any(), eq("招行的客户等级是怎么样的"), isNull(), eq(false))).thenReturn(route);
         SkillTransitionResult passThrough = SkillTransitionResult.notHandled();
         passThrough.setClearState(true);
@@ -155,7 +165,7 @@ class ChatControllerTest {
         response.setIntent("KNOWLEDGE_QA");
         response.setAnswer("rag answer");
         when(aiChatService.invoke(eq("trace-rag"), eq("s1"), eq("招行的客户等级是怎么样的"),
-                eq(new ArrayList<HistoryMessage>()), eq("RAG_QUERY"), eq(true), eq("RAG_QUERY"), eq(0.92D), isNull()))
+                eq(new ArrayList<HistoryMessage>()), eq("RAG_QUERY"), eq(true), eq("RAG_QUERY"), anyDouble(), any(), eq("ROUTER_SWITCH_INTENT"), any()))
                 .thenReturn(response);
 
         mockMvc.perform(post("/api/chat")
@@ -180,6 +190,7 @@ class ChatControllerTest {
         IntentRouteResult result = new IntentRouteResult();
         result.setConfidence(0.0D);
         result.setReason("no deterministic route");
+        result.setDialogAct("NO_DETERMINISTIC_ROUTE");
         return result;
     }
 
@@ -190,6 +201,7 @@ class ChatControllerTest {
         result.setClearHistory(true);
         result.setConfidence(0.99D);
         result.setReason("frontend requested skill");
+        result.setDialogAct("FRONTEND_REQUESTED_SKILL");
         return result;
     }
 }

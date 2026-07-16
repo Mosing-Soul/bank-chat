@@ -42,6 +42,8 @@ class AiChatRequest(BaseModel):
     routerIntent: Optional[str] = None
     routerConfidence: Optional[float] = None
     entities: Dict[str, Any] = Field(default_factory=dict)
+    dialogAct: Optional[str] = None
+    skillExamples: Dict[str, Any] = Field(default_factory=dict)
 
 
 class Citation(BaseModel):

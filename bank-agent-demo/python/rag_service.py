@@ -342,7 +342,14 @@ async def health():
 @app.post("/ai/chat/invoke", response_model=AiChatResponse)
 async def ai_chat_invoke(request: AiChatRequest):
     intent_service = IntentRecognitionService(llm)
-    intent = intent_service.recognize(request.message)
+    intent = intent_service.recognize(
+        request.message,
+        router_intent=request.routerIntent or request.requestedSkill,
+        router_confidence=request.routerConfidence,
+        entities=request.entities,
+        dialog_act=request.dialogAct,
+        skill_examples=request.skillExamples,
+    )
     forced_intent = forced_intent_from_skill(request.requestedSkill) if request.forceSkill else None
     effective_history = [] if forced_intent else request.history
     if forced_intent:

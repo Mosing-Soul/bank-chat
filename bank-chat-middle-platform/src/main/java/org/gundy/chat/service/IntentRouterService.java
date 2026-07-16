@@ -1,5 +1,6 @@
 package org.gundy.chat.service;
 
+import org.gundy.chat.entity.config.SkillExampleConfig;
 import org.gundy.chat.entity.dialog.DialogState;
 import org.gundy.chat.entity.intent.ExtractedEntities;
 import org.gundy.chat.entity.intent.IntentRouteResult;
@@ -8,9 +9,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class IntentRouterService {
     private final EntityExtractorService entityExtractorService;
+    private final SkillConfigService skillConfigService;
 
-    public IntentRouterService(EntityExtractorService entityExtractorService) {
+    public IntentRouterService(EntityExtractorService entityExtractorService,
+                               SkillConfigService skillConfigService) {
         this.entityExtractorService = entityExtractorService;
+        this.skillConfigService = skillConfigService;
     }
 
     public IntentRouteResult route(DialogState state, String userMessage, String requestedSkill, boolean forceSkill) {
@@ -25,10 +29,17 @@ public class IntentRouterService {
             result.setClearHistory(forceSkill);
             result.setConfidence(forceSkill ? 0.99D : 0.9D);
             result.setReason("frontend requested skill");
+            result.setDialogAct("FRONTEND_REQUESTED_SKILL");
             return result;
         }
 
         String text = safe(userMessage);
+        SkillExampleConfig matchedExample = skillConfigService.bestExampleMatch(text);
+        if (matchedExample != null) {
+            double score = skillConfigService.bestExampleScore(text, matchedExample);
+            return routeTo(result, matchedExample.getSkillCode(), Math.max(score, matchedExample.getConfidence()),
+                    "configured skill example: " + matchedExample.getExampleId());
+        }
         if (isInstitutionKnowledgeQuery(text, entities)) {
             return routeTo(result, "RAG_QUERY", 0.92D, "institution knowledge query");
         }
@@ -44,11 +55,13 @@ public class IntentRouterService {
             result.setClearHistory(false);
             result.setConfidence(0.82D);
             result.setReason("message action query");
+            result.setDialogAct("ROUTER_CONTINUE_MESSAGE");
             return result;
         }
 
         result.setConfidence(0.0D);
         result.setReason("no deterministic route");
+        result.setDialogAct("NO_DETERMINISTIC_ROUTE");
         return result;
     }
 
@@ -58,6 +71,7 @@ public class IntentRouterService {
         result.setClearHistory(true);
         result.setConfidence(confidence);
         result.setReason(reason);
+        result.setDialogAct("ROUTER_SWITCH_INTENT");
         return result;
     }
 
@@ -68,14 +82,12 @@ public class IntentRouterService {
         if (entities.hasBusinessTerm() && text.matches(".*(规则|制度|办法|怎么|如何|怎么样|是什么|划分|分类|分层).*")) {
             return true;
         }
-        if (text.matches(".*(客户等级|客户分层|客户分类|等级划分).*(规则|制度|怎么|如何|怎么样|是什么|划分).*")) {
-            return true;
-        }
-        return false;
+        return text.matches(".*(客户等级|客户分层|客户分类|等级划分).*(规则|制度|怎么|如何|怎么样|是什么|划分).*");
     }
 
     private boolean isGoldPriceQuery(String text, ExtractedEntities entities) {
-        return entities.hasMarketTerm() && text.matches(".*(黄金|金价|Au9999|AU9999).*(价格|多少|查询|现在|行情|走势).*");
+        return entities.hasMarketTerm()
+                && text.matches(".*(黄金|金价|Au9999|AU9999).*(价格|多少|查询|现在|行情|走势|怎么样).*");
     }
 
     private boolean isCustomerAumQuery(String text, ExtractedEntities entities) {

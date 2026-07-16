@@ -1,3 +1,4 @@
+import json
 import os
 import re
 
@@ -21,16 +22,22 @@ KNOWLEDGE_QA, CUSTOMER_AUM_QUERY, EXTERNAL_API_QUERY, MESSAGE_SEND, GENERAL_CHAT
 - “反洗钱法中，临时冻结的最长时限是48小时吗？” -> KNOWLEDGE_QA
 - “银行保险机构资产管理产品信息披露有什么要求？” -> KNOWLEDGE_QA
 - “金葵花客户达标标准是什么？” -> KNOWLEDGE_QA
+- “招行的客户等级是怎么样的” -> KNOWLEDGE_QA（银行名 + 客户等级规则，不是查询某个客户）
+- “客户等级规则是什么” -> KNOWLEDGE_QA（规则/制度类问题）
+- “客户张伟等级是多少” -> CUSTOMER_AUM_QUERY（具体客户实体 + 客户数据）
 - “普惠金融走进千企万户活动讲了什么？” -> KNOWLEDGE_QA
 - “商业银行主要监管指标里资本充足率是多少？” -> KNOWLEDGE_QA
 - “查询客户张伟当前AUM” -> CUSTOMER_AUM_QUERY
+- “黄金价格是多少” -> EXTERNAL_API_QUERY
 - “给张伟生成产品到期提醒” -> MESSAGE_SEND
+- 当前正在发消息时，用户回复“产品到期提醒” -> MESSAGE_SEND（补充消息用途）
 
 要求：
 1. 不要生成函数名、URL 或路由节点名称。
 2. confidence 必须是 0 到 1 的数字。
 3. entities 只填能从用户话语明确抽取到的字段。
 4. reason 用一句简短分类依据，不要输出推理链。
+5. 如果辅助路由信息 routerIntent 置信度较高，优先参考它；除非用户原文和实体强烈矛盾。
 """
 
 try:
@@ -38,7 +45,7 @@ try:
 
     PROMPT = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
-        ("human", "{user_input}"),
+        ("human", "用户输入：{user_input}\n\n辅助路由信息：\n{router_context}"),
     ])
 except Exception:
     PROMPT = None
@@ -49,22 +56,32 @@ class IntentRecognitionService:
         self.llm = llm
         self.threshold = float(threshold or os.getenv("INTENT_CONFIDENCE_THRESHOLD", "0.6"))
 
-    def recognize(self, user_input: str) -> IntentResult:
+    def recognize(self, user_input: str, router_intent=None, router_confidence=None, entities=None,
+                  dialog_act=None, skill_examples=None) -> IntentResult:
         if not user_input or not user_input.strip():
             return self._unknown("empty input")
 
+        router_context = build_router_context(router_intent, router_confidence, entities, dialog_act, skill_examples)
         try:
             if self.llm is None or PROMPT is None:
-                result = fallback_intent(user_input)
+                result = fallback_intent(user_input, router_intent=router_intent,
+                                         router_confidence=router_confidence, router_entities=entities,
+                                         dialog_act=dialog_act, skill_examples=skill_examples)
             else:
                 chain = PROMPT | self.llm.with_structured_output(IntentResult)
-                result = chain.invoke({"user_input": user_input})
+                result = chain.invoke({"user_input": user_input, "router_context": router_context})
                 if isinstance(result, dict):
                     result = IntentResult(**result)
         except Exception as exc:
-            return fallback_intent(user_input, reason=f"model unavailable: {type(exc).__name__}")
+            return fallback_intent(user_input, reason=f"model unavailable: {type(exc).__name__}",
+                                   router_intent=router_intent, router_confidence=router_confidence,
+                                   router_entities=entities, dialog_act=dialog_act, skill_examples=skill_examples)
 
-        local_result = fallback_intent(user_input, reason="local semantic fallback")
+        result = apply_router_prior(result, router_intent, router_confidence, entities, dialog_act)
+        result = apply_example_prior(result, user_input, entities, skill_examples)
+        local_result = fallback_intent(user_input, reason="local semantic fallback",
+                                       router_intent=router_intent, router_confidence=router_confidence,
+                                       router_entities=entities, dialog_act=dialog_act, skill_examples=skill_examples)
         if result.intent == IntentType.UNKNOWN and local_result.intent != IntentType.UNKNOWN:
             return local_result
 
@@ -88,9 +105,18 @@ class IntentRecognitionService:
         )
 
 
-def fallback_intent(user_input: str, reason: str = "fallback rules") -> IntentResult:
+def fallback_intent(user_input: str, reason: str = "fallback rules", router_intent=None,
+                    router_confidence=None, router_entities=None, dialog_act=None, skill_examples=None) -> IntentResult:
     text = user_input.strip()
     entities = IntentEntities(customerName=extract_customer_name(text))
+    entities = merge_router_entities(entities, router_entities)
+
+    router_result = router_prior(router_intent, router_confidence, entities, dialog_act)
+    if router_result is not None:
+        return router_result
+    example_result = example_prior(text, entities, skill_examples)
+    if example_result is not None:
+        return example_result
 
     if is_customer_aum_query(text, entities):
         return IntentResult(
@@ -114,7 +140,134 @@ def fallback_intent(user_input: str, reason: str = "fallback rules") -> IntentRe
         return IntentResult(intent=IntentType.KNOWLEDGE_QA, confidence=0.78, entities=entities, reason=reason)
     if re.search(r"(你好|您好|介绍|你是谁|你能做什么)", text):
         return IntentResult(intent=IntentType.GENERAL_CHAT, confidence=0.78, entities=entities, reason=reason)
-    return IntentResult(intent=IntentType.UNKNOWN, confidence=0.4, entities=entities, reason=reason)
+    return IntentResult(intent=IntentType.GENERAL_CHAT, confidence=0.5, entities=entities, reason="general chat fallback")
+
+
+def build_router_context(router_intent=None, router_confidence=None, entities=None, dialog_act=None, skill_examples=None) -> str:
+    payload = {
+        "routerIntent": router_intent,
+        "routerConfidence": router_confidence,
+        "entities": entities or {},
+        "dialogAct": dialog_act,
+        "skillExamples": (skill_examples or {}).get("examples", [])[:12] if isinstance(skill_examples, dict) else [],
+        "usage": "这些是 Java IntentRouter/NER/DST 给出的辅助特征，不是用户原文；高置信时优先参考。",
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def router_prior(router_intent=None, router_confidence=None, entities=None, dialog_act=None):
+    intent = normalize_router_intent(router_intent)
+    confidence = float(router_confidence or 0.0)
+    if intent is None:
+        return None
+    if confidence >= 0.85 or dialog_act in ("FRONTEND_REQUESTED_SKILL", "ROUTER_SWITCH_INTENT"):
+        return IntentResult(
+            intent=intent,
+            confidence=max(confidence, 0.85),
+            entities=entities or IntentEntities(),
+            reason="router prior",
+        )
+    return None
+
+
+def apply_router_prior(result: IntentResult, router_intent=None, router_confidence=None,
+                       router_entities=None, dialog_act=None) -> IntentResult:
+    entities = merge_router_entities(result.entities, router_entities)
+    result.entities = entities
+    prior = router_prior(router_intent, router_confidence, entities, dialog_act)
+    if prior is None:
+        return result
+    if result.intent == prior.intent:
+        result.confidence = max(result.confidence, prior.confidence)
+        result.reason = result.reason or prior.reason
+        return result
+    if prior.confidence >= 0.9 or result.intent == IntentType.UNKNOWN or result.confidence < 0.75:
+        return prior
+    return result
+
+
+def apply_example_prior(result: IntentResult, user_input: str, router_entities=None, skill_examples=None) -> IntentResult:
+    prior = example_prior(user_input, merge_router_entities(result.entities, router_entities), skill_examples)
+    if prior is None:
+        return result
+    if result.intent == prior.intent:
+        result.confidence = max(result.confidence, prior.confidence)
+        return result
+    if prior.confidence >= 0.86 and result.confidence < 0.82:
+        return prior
+    return result
+
+
+def example_prior(user_input: str, entities: IntentEntities, skill_examples=None):
+    examples = []
+    if isinstance(skill_examples, dict):
+        examples = skill_examples.get("examples") or []
+    if not examples:
+        return None
+    normalized_input = normalize_text(user_input)
+    best_example = None
+    best_score = 0.0
+    for example in examples:
+        if not isinstance(example, dict):
+            continue
+        score = text_similarity(normalized_input, normalize_text(str(example.get("text") or "")))
+        score = score * float(example.get("confidence") or 0.0)
+        if score > best_score:
+            best_score = score
+            best_example = example
+    if best_example is None or best_score < 0.72:
+        return None
+    intent = normalize_router_intent(best_example.get("skillCode"))
+    if intent is None:
+        return None
+    return IntentResult(intent=intent, confidence=min(max(best_score, 0.72), 0.98), entities=entities, reason="configured example prior")
+
+
+def normalize_router_intent(router_intent):
+    if not router_intent:
+        return None
+    value = str(router_intent).strip().upper()
+    mapping = {
+        "RAG_QUERY": IntentType.KNOWLEDGE_QA,
+        "RULE_QUERY": IntentType.KNOWLEDGE_QA,
+        "KNOWLEDGE_QA": IntentType.KNOWLEDGE_QA,
+        "CUSTOMER_AUM": IntentType.CUSTOMER_AUM_QUERY,
+        "CUSTOMER_AUM_QUERY": IntentType.CUSTOMER_AUM_QUERY,
+        "AUM": IntentType.CUSTOMER_AUM_QUERY,
+        "GOLD_PRICE": IntentType.EXTERNAL_API_QUERY,
+        "GOLD": IntentType.EXTERNAL_API_QUERY,
+        "EXTERNAL_API_QUERY": IntentType.EXTERNAL_API_QUERY,
+        "MESSAGE_SEND": IntentType.MESSAGE_SEND,
+        "MESSAGE": IntentType.MESSAGE_SEND,
+        "GENERAL_CHAT": IntentType.GENERAL_CHAT,
+        "UNKNOWN": IntentType.UNKNOWN,
+    }
+    return mapping.get(value)
+
+
+def merge_router_entities(entities: IntentEntities, router_entities=None) -> IntentEntities:
+    if not router_entities:
+        return entities
+    if not entities.customerName:
+        customer_names = router_entities.get("customerNames") if isinstance(router_entities, dict) else None
+        if isinstance(customer_names, list) and customer_names:
+            entities.customerName = str(customer_names[0])
+    return entities
+
+
+def normalize_text(value: str) -> str:
+    return re.sub(r"[\s，。？！?！、,.]", "", value or "").lower()
+
+
+def text_similarity(input_text: str, example_text: str) -> float:
+    if not input_text or not example_text:
+        return 0.0
+    if input_text == example_text:
+        return 1.0
+    if input_text in example_text or example_text in input_text:
+        return max(0.8, min(len(input_text), len(example_text)) / max(len(input_text), len(example_text)))
+    overlap = sum(1 for char in input_text if char in example_text)
+    return overlap / max(len(input_text), len(example_text))
 
 
 def is_knowledge_qa_candidate(text: str) -> bool:

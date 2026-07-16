@@ -36,12 +36,13 @@ public class AiChatService {
 
     public ChatResponse invoke(String traceId, String sessionId, String message, List<HistoryMessage> history,
                                String requestedSkill, boolean forceSkill) {
-        return invoke(traceId, sessionId, message, history, requestedSkill, forceSkill, null, null, null);
+        return invoke(traceId, sessionId, message, history, requestedSkill, forceSkill, null, null, null, null, null);
     }
 
     public ChatResponse invoke(String traceId, String sessionId, String message, List<HistoryMessage> history,
                                String requestedSkill, boolean forceSkill, String routerIntent,
-                               Double routerConfidence, Map<String, Object> entities) {
+                               Double routerConfidence, Map<String, Object> entities, String dialogAct,
+                               Map<String, Object> skillExamples) {
         AiChatRequest request = new AiChatRequest();
         request.setTraceId(traceId);
         request.setSessionId(sessionId);
@@ -52,6 +53,8 @@ public class AiChatService {
         request.setRouterIntent(routerIntent);
         request.setRouterConfidence(routerConfidence);
         request.setEntities(entities);
+        request.setDialogAct(dialogAct);
+        request.setSkillExamples(skillExamples);
 
         HttpHeaders headers = new HttpHeaders();
         headers.add("X-Trace-Id", traceId);

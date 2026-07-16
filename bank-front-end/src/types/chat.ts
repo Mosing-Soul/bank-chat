@@ -6,11 +6,25 @@ export interface Citation {
 }
 
 export interface ChatConfirmation {
+  type?: string;
+  title?: string;
   operationId?: string;
   customerName?: string;
   content?: string;
   status?: string;
   mock?: boolean;
+  originalMessage?: string;
+  reason?: string;
+  candidates?: Array<{
+    requestedSkill: string;
+    skillCode?: string;
+    skillName?: string;
+    label?: string;
+    description?: string;
+    prompt?: string;
+    displayText?: string;
+    confidence?: number;
+  }>;
 }
 
 export interface ChatMessage {
@@ -48,4 +62,36 @@ export interface ChatResponse {
     code: string;
     message: string;
   } | null;
+}
+
+export interface SkillExampleConfig {
+  exampleId: string;
+  skillCode: string;
+  text: string;
+  displayText: string;
+  icon?: string;
+  confidence: number;
+  showOnHome: boolean;
+  quickAction: boolean;
+  greeting: boolean;
+  forceWhenClicked: boolean;
+  sortOrder: number;
+}
+
+export interface SkillConfig {
+  skillCode: string;
+  skillName: string;
+  description: string;
+  enabled: boolean;
+  frontendVisible: boolean;
+  forceWhenClicked: boolean;
+  fallbackPriority: number;
+  clarificationText?: string;
+  examples: SkillExampleConfig[];
+}
+
+export interface SkillConfigResponse {
+  skills: SkillConfig[];
+  quickActions: SkillExampleConfig[];
+  greetings: SkillExampleConfig[];
 }

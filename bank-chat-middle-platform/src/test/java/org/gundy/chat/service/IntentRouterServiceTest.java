@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class IntentRouterServiceTest {
-    private final IntentRouterService router = new IntentRouterService(new EntityExtractorService());
+    private final IntentRouterService router = new IntentRouterService(new EntityExtractorService(), new SkillConfigService());
 
     @Test
     void routesBankCustomerLevelQuestionToRag() {

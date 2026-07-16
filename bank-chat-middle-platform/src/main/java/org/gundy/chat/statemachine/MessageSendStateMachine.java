@@ -287,15 +287,22 @@ public class MessageSendStateMachine implements SkillStateMachine {
 
     private String extractCustomerName(String text) {
         String value = safe(text);
-        Matcher matcher = Pattern.compile("(?:客户|给)([\\u4e00-\\u9fa5]{2,4})").matcher(value);
+        Matcher matcher = Pattern.compile("(?:客户|给)([\\u4e00-\\u9fa5]{2,4}?)(?=发送|发|通知|提醒|消息|的|$|[，,。\\s])").matcher(value);
         if (matcher.find()) {
-            String name = matcher.group(1).replaceAll("(发送|发|生成|消息|提醒|通知)$", "");
+            String name = cleanCustomerName(matcher.group(1));
             return name.length() == 0 ? null : name;
         }
         if (value.matches("[\\u4e00-\\u9fa5]{2,4}") && inferPurpose(value) == null && !isConfirm(value) && !isCancel(value)) {
             return value;
         }
         return null;
+    }
+
+    private String cleanCustomerName(String name) {
+        if (name == null) {
+            return "";
+        }
+        return name.replaceAll("(发送|发|生成|消息|提醒|通知)$", "").trim();
     }
 
     private String extractCustomContent(String text) {

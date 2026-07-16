@@ -8,6 +8,7 @@ public class IntentRouteResult {
     private boolean clearHistory;
     private double confidence;
     private String reason;
+    private String dialogAct;
     private ExtractedEntities entities;
 
     public String getRequestedSkill() { return requestedSkill; }
@@ -20,6 +21,8 @@ public class IntentRouteResult {
     public void setConfidence(double confidence) { this.confidence = confidence; }
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }
+    public String getDialogAct() { return dialogAct; }
+    public void setDialogAct(String dialogAct) { this.dialogAct = dialogAct; }
     public ExtractedEntities getEntities() { return entities; }
     public void setEntities(ExtractedEntities entities) { this.entities = entities; }
 

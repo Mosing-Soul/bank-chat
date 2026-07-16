@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse } from '../types/chat';
+import type { ChatRequest, ChatResponse, SkillConfigResponse } from '../types/chat';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -38,4 +38,28 @@ export const sendChatMessage = async (payload: ChatRequest, signal?: AbortSignal
     window.clearTimeout(timeoutId);
     signal?.removeEventListener('abort', abortFromCaller);
   }
+};
+
+export const fetchSkillConfig = async (): Promise<SkillConfigResponse> => {
+  const response = await fetch('/api/skills/config');
+  if (!response.ok) {
+    throw new Error(`技能配置加载失败：${response.status}`);
+  }
+  return response.json();
+};
+
+export const saveSkillConfig = async (payload: SkillConfigResponse): Promise<SkillConfigResponse> => {
+  const response = await fetch('/api/skills/config', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`技能配置保存失败：${response.status}`);
+  }
+
+  return response.json();
 };

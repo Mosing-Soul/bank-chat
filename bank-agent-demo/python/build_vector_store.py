@@ -7,21 +7,28 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from env_config import env_bool, env_int, env_path, optional_env, require_env
 
-# 代理配置（如需）
-os.environ['HTTP_PROXY'] = 'http://127.0.0.1:7890'
-os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:7890'
+
+# 代理配置（可选）
+if optional_env("HTTP_PROXY"):
+    os.environ["HTTP_PROXY"] = optional_env("HTTP_PROXY")
+if optional_env("HTTPS_PROXY"):
+    os.environ["HTTPS_PROXY"] = optional_env("HTTPS_PROXY")
 
 # 配置
-DOCUMENTS_DIR = "../bank_docs"          # 存放文档的文件夹（相对于当前工作目录）
-VECTOR_DB_DIR = "./chroma_db"          # 向量库持久化目录
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
+DOCUMENTS_DIR = str(env_path("BUILD_DOCUMENTS_DIR"))
+VECTOR_DB_DIR = str(env_path("BUILD_VECTOR_DB_DIR"))
+CHUNK_SIZE = env_int("DOCUMENT_CHUNK_SIZE")
+CHUNK_OVERLAP = env_int("DOCUMENT_CHUNK_OVERLAP")
 
 # Embedding 模型（CPU 上运行）
 embedding_model = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-small-zh-v1.5",
-    model_kwargs={'device': 'cpu', 'local_files_only': True},
+    model_name=require_env("EMBEDDING_MODEL_NAME"),
+    model_kwargs={
+        'device': require_env("EMBEDDING_DEVICE"),
+        'local_files_only': env_bool("EMBEDDING_LOCAL_FILES_ONLY"),
+    },
     encode_kwargs={'normalize_embeddings': True}
 )
 

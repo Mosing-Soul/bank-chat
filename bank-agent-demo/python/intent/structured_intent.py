@@ -1,8 +1,8 @@
 import json
-import os
 import re
 
 from ai_chat_models import IntentEntities, IntentResult, IntentType
+from env_config import env_float
 
 
 SYSTEM_PROMPT = """
@@ -25,6 +25,7 @@ KNOWLEDGE_QA, CUSTOMER_AUM_QUERY, EXTERNAL_API_QUERY, MESSAGE_SEND, GENERAL_CHAT
 - “招行的客户等级是怎么样的” -> KNOWLEDGE_QA（银行名 + 客户等级规则，不是查询某个客户）
 - “客户等级规则是什么” -> KNOWLEDGE_QA（规则/制度类问题）
 - “客户张伟等级是多少” -> CUSTOMER_AUM_QUERY（具体客户实体 + 客户数据）
+- “帮我查一下客户等级” -> UNKNOWN（无法确定是查询某位客户的等级，还是查询客户等级规则；customerName必须为空，候选为CUSTOMER_AUM_QUERY和KNOWLEDGE_QA）
 - “普惠金融走进千企万户活动讲了什么？” -> KNOWLEDGE_QA
 - “商业银行主要监管指标里资本充足率是多少？” -> KNOWLEDGE_QA
 - “查询客户张伟当前AUM” -> CUSTOMER_AUM_QUERY
@@ -35,9 +36,10 @@ KNOWLEDGE_QA, CUSTOMER_AUM_QUERY, EXTERNAL_API_QUERY, MESSAGE_SEND, GENERAL_CHAT
 要求：
 1. 不要生成函数名、URL 或路由节点名称。
 2. confidence 必须是 0 到 1 的数字。
-3. entities 只填能从用户话语明确抽取到的字段。
+3. entities 只填能从用户话语明确抽取到的字段；禁止把“等级、资产、信息、分类、分层、余额、持仓、规则”等业务词当作客户姓名。
 4. reason 用一句简短分类依据，不要输出推理链。
 5. 如果辅助路由信息 routerIntent 置信度较高，优先参考它；除非用户原文和实体强烈矛盾。
+6. 参数缺失时填写 missingSlots；存在多种合理意图时选择 UNKNOWN，并填写 candidateIntents 和 ambiguities。
 """
 
 try:
@@ -54,7 +56,7 @@ except Exception:
 class IntentRecognitionService:
     def __init__(self, llm=None, threshold=None):
         self.llm = llm
-        self.threshold = float(threshold or os.getenv("INTENT_CONFIDENCE_THRESHOLD", "0.6"))
+        self.threshold = float(threshold) if threshold is not None else env_float("INTENT_CONFIDENCE_THRESHOLD")
 
     def recognize(self, user_input: str, router_intent=None, router_confidence=None, entities=None,
                   dialog_act=None, skill_examples=None) -> IntentResult:
@@ -123,6 +125,7 @@ def fallback_intent(user_input: str, reason: str = "fallback rules", router_inte
             intent=IntentType.CUSTOMER_AUM_QUERY,
             confidence=0.72 if entities.customerName else 0.55,
             entities=entities,
+            missingSlots=[] if (entities.customerName or entities.customerId) else ["customerNameOrId"],
             reason=reason,
         )
     if is_message_send_request(text):
@@ -252,6 +255,26 @@ def merge_router_entities(entities: IntentEntities, router_entities=None) -> Int
         customer_names = router_entities.get("customerNames") if isinstance(router_entities, dict) else None
         if isinstance(customer_names, list) and customer_names:
             entities.customerName = str(customer_names[0])
+    if not entities.customerId:
+        customer_ids = router_entities.get("customerIds") if isinstance(router_entities, dict) else None
+        if isinstance(customer_ids, list) and customer_ids:
+            entities.customerId = str(customer_ids[0])
+    if not entities.bankName:
+        bank_names = router_entities.get("bankNames") if isinstance(router_entities, dict) else None
+        if isinstance(bank_names, list) and bank_names:
+            entities.bankName = str(bank_names[0])
+    if not entities.productName:
+        product_names = router_entities.get("productNames") if isinstance(router_entities, dict) else None
+        if isinstance(product_names, list) and product_names:
+            entities.productName = str(product_names[0])
+    if not entities.businessTerm:
+        business_terms = router_entities.get("businessTerms") if isinstance(router_entities, dict) else None
+        if isinstance(business_terms, list) and business_terms:
+            entities.businessTerm = str(business_terms[0])
+    if not entities.marketSymbol:
+        market_terms = router_entities.get("marketTerms") if isinstance(router_entities, dict) else None
+        if isinstance(market_terms, list) and market_terms:
+            entities.marketSymbol = str(market_terms[0])
     return entities
 
 
@@ -403,13 +426,20 @@ def is_message_send_request(text: str) -> bool:
 
 
 def extract_customer_name(text: str):
-    match = re.search(r"(?:客户|给)([\u4e00-\u9fa5]{2,4})", text)
-    if match:
+    reserved = {"等级", "资产", "信息", "分类", "分层", "余额", "持仓", "规则", "制度", "风险", "消息", "通知", "提醒"}
+    patterns = (
+        r"客户(?:姓名|名)?[：:]?([\u4e00-\u9fa5]{2,4}?)(?=的|当前|AUM|aum|资产|持仓|余额|等级|$)",
+        r"(?:查询|查一下|查|给)([\u4e00-\u9fa5]{2,4}?)(?=的|当前|AUM|aum|发|发送|通知|提醒)",
+        r"([\u4e00-\u9fa5]{2,4})(?:当前)?(?:的)?AUM",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            continue
         name = match.group(1)
-        name = re.sub(r"(发送|发消息|查询|当前|的)$", "", name)
-        return name or None
-    match = re.search(r"([\u4e00-\u9fa5]{2,4})(?:当前)?(?:的)?AUM", text, re.IGNORECASE)
-    return match.group(1) if match else None
+        if name not in reserved and not any(name.endswith(word) for word in reserved):
+            return name
+    return None
 
 
 def extract_message_purpose(text: str):

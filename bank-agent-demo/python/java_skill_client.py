@@ -1,7 +1,8 @@
-import os
 from typing import Any, Dict, List
 
 import httpx
+
+from env_config import env_float, require_env
 
 
 class JavaSkillClientError(Exception):
@@ -13,11 +14,12 @@ class JavaSkillClientError(Exception):
 
 class JavaSkillClient:
     def __init__(self, base_url=None, api_key=None, api_key_header=None, timeout=None, transport=None):
-        self.base_url = (base_url or os.getenv("JAVA_SKILL_BASE_URL") or "http://localhost:8080/internal/skills").rstrip("/")
-        self.api_key = api_key or os.getenv("INTERNAL_SKILL_API_KEY", "local-dev-internal-key")
-        self.api_key_header = api_key_header or os.getenv("INTERNAL_SKILL_API_KEY_HEADER", "X-Internal-Api-Key")
-        seconds = float(timeout or os.getenv("JAVA_SKILL_TIMEOUT_SECONDS", "5"))
-        self.timeout = httpx.Timeout(seconds, connect=min(seconds, 2.0))
+        self.base_url = (base_url or require_env("JAVA_SKILL_BASE_URL")).rstrip("/")
+        self.api_key = api_key or require_env("INTERNAL_SKILL_API_KEY")
+        self.api_key_header = api_key_header or require_env("INTERNAL_SKILL_API_KEY_HEADER")
+        seconds = float(timeout) if timeout is not None else env_float("JAVA_SKILL_TIMEOUT_SECONDS")
+        connect_seconds = env_float("JAVA_SKILL_CONNECT_TIMEOUT_SECONDS")
+        self.timeout = httpx.Timeout(seconds, connect=connect_seconds)
         self.transport = transport
 
     def search_customers(self, trace_id: str, name: str) -> List[Dict[str, Any]]:

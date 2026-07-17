@@ -8,6 +8,7 @@ import java.util.Map;
 public class ExtractedEntities {
     private List<String> bankNames = new ArrayList<String>();
     private List<String> customerNames = new ArrayList<String>();
+    private List<String> customerIds = new ArrayList<String>();
     private List<String> productNames = new ArrayList<String>();
     private List<String> businessTerms = new ArrayList<String>();
     private List<String> marketTerms = new ArrayList<String>();
@@ -17,6 +18,8 @@ public class ExtractedEntities {
     public void setBankNames(List<String> bankNames) { this.bankNames = bankNames; }
     public List<String> getCustomerNames() { return customerNames; }
     public void setCustomerNames(List<String> customerNames) { this.customerNames = customerNames; }
+    public List<String> getCustomerIds() { return customerIds; }
+    public void setCustomerIds(List<String> customerIds) { this.customerIds = customerIds; }
     public List<String> getProductNames() { return productNames; }
     public void setProductNames(List<String> productNames) { this.productNames = productNames; }
     public List<String> getBusinessTerms() { return businessTerms; }
@@ -28,6 +31,7 @@ public class ExtractedEntities {
 
     public boolean hasBankName() { return !bankNames.isEmpty(); }
     public boolean hasCustomerName() { return !customerNames.isEmpty(); }
+    public boolean hasCustomerId() { return !customerIds.isEmpty(); }
     public boolean hasBusinessTerm() { return !businessTerms.isEmpty(); }
     public boolean hasMarketTerm() { return !marketTerms.isEmpty(); }
     public boolean hasMessageAction() { return !messageActions.isEmpty(); }
@@ -36,6 +40,7 @@ public class ExtractedEntities {
         Map<String, Object> values = new LinkedHashMap<String, Object>();
         values.put("bankNames", bankNames);
         values.put("customerNames", customerNames);
+        values.put("customerIds", customerIds);
         values.put("productNames", productNames);
         values.put("businessTerms", businessTerms);
         values.put("marketTerms", marketTerms);

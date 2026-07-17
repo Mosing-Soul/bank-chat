@@ -36,7 +36,7 @@ public class EntityExtractorService {
         addContained(value, MARKET_TERMS, entities.getMarketTerms());
         addContained(value, MESSAGE_ACTIONS, entities.getMessageActions());
         addContained(value, PRODUCT_HINTS, entities.getProductNames());
-        extractCustomerNames(value, entities);
+        extractCustomerIds(value, entities);
         return entities;
     }
 
@@ -48,24 +48,13 @@ public class EntityExtractorService {
         }
     }
 
-    private void extractCustomerNames(String text, ExtractedEntities entities) {
-        Matcher customerMatcher = Pattern.compile("客户([\\u4e00-\\u9fa5]{2,4})").matcher(text);
-        while (customerMatcher.find()) {
-            addCustomerName(customerMatcher.group(1), entities);
-        }
-        Matcher sendMatcher = Pattern.compile("给([\\u4e00-\\u9fa5]{2,4})(?:发|发送|通知|提醒)").matcher(text);
-        while (sendMatcher.find()) {
-            addCustomerName(sendMatcher.group(1), entities);
-        }
-    }
-
-    private void addCustomerName(String name, ExtractedEntities entities) {
-        if (name == null) {
-            return;
-        }
-        String value = name.replaceAll("(发送|通知|提醒|客户|消息)$", "");
-        if (value.length() >= 2 && !entities.getCustomerNames().contains(value)) {
-            entities.getCustomerNames().add(value);
+    private void extractCustomerIds(String text, ExtractedEntities entities) {
+        Matcher matcher = Pattern.compile("(?i)(?:客户号|客户编号)?[：:\\s]*(C(?:UST)?\\d{3,})").matcher(text);
+        while (matcher.find()) {
+            String customerId = matcher.group(1).toUpperCase();
+            if (!entities.getCustomerIds().contains(customerId)) {
+                entities.getCustomerIds().add(customerId);
+            }
         }
     }
 }

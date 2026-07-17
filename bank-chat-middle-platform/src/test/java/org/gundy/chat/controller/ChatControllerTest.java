@@ -18,6 +18,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
@@ -101,6 +103,43 @@ class ChatControllerTest {
                         .content("{\"sessionId\":\"s1\",\"message\":\"你好\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.traceId").exists());
+    }
+
+    @Test
+    void ambiguousQuestionReturnsIntentClarificationContract() throws Exception {
+        IntentRouteResult route = noRoute();
+        when(intentRouterService.route(any(), eq("帮我查一下客户等级"), isNull(), eq(false))).thenReturn(route);
+        when(dialogStateMachineService.handle(anyString(), eq("case-1"), any(), eq("帮我查一下客户等级"),
+                isNull(), eq(false))).thenReturn(SkillTransitionResult.notHandled());
+        when(memoryService.getHistory("case-1")).thenReturn(new ArrayList<HistoryMessage>());
+
+        ChatResponse aiResponse = new ChatResponse();
+        aiResponse.setIntent("UNKNOWN");
+        aiResponse.setConfidence(0.55D);
+        aiResponse.setAnswer("请说明具体事项");
+        when(aiChatService.invoke(anyString(), eq("case-1"), eq("帮我查一下客户等级"), anyList(),
+                isNull(), eq(false), isNull(), anyDouble(), any(), eq("NO_DETERMINISTIC_ROUTE"), any()))
+                .thenReturn(aiResponse);
+
+        ChatResponse clarification = new ChatResponse();
+        clarification.setIntent("CLARIFICATION");
+        clarification.setRequiresConfirmation(true);
+        clarification.setAnswer("我不太确定您想办理哪类事项，请选择一个方向继续。");
+        Map<String, Object> confirmation = new LinkedHashMap<String, Object>();
+        confirmation.put("type", "INTENT_CLARIFICATION");
+        confirmation.put("originalMessage", "帮我查一下客户等级");
+        clarification.setConfirmation(confirmation);
+        when(intentClarificationService.maybeClarify(anyString(), eq("case-1"), eq("帮我查一下客户等级"),
+                eq(route), eq(false), eq(aiResponse))).thenReturn(clarification);
+
+        mockMvc.perform(post("/api/chat")
+                        .contentType("application/json")
+                        .content("{\"sessionId\":\"case-1\",\"message\":\"帮我查一下客户等级\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.intent", is("CLARIFICATION")))
+                .andExpect(jsonPath("$.requiresConfirmation", is(true)))
+                .andExpect(jsonPath("$.confirmation.type", is("INTENT_CLARIFICATION")))
+                .andExpect(jsonPath("$.confirmation.originalMessage", is("帮我查一下客户等级")));
     }
 
     @Test

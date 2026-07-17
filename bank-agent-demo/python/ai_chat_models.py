@@ -16,14 +16,22 @@ class IntentType(str, Enum):
 class IntentEntities(BaseModel):
     customerName: Optional[str] = None
     customerId: Optional[str] = None
+    bankName: Optional[str] = None
+    productName: Optional[str] = None
+    businessTerm: Optional[str] = None
+    marketSymbol: Optional[str] = None
     templateCode: Optional[str] = None
     messagePurpose: Optional[str] = None
+    messageChannel: Optional[str] = None
 
 
 class IntentResult(BaseModel):
     intent: IntentType
     confidence: float = Field(ge=0.0, le=1.0)
     entities: IntentEntities = Field(default_factory=IntentEntities)
+    missingSlots: List[str] = Field(default_factory=list)
+    candidateIntents: List[IntentType] = Field(default_factory=list)
+    ambiguities: List[str] = Field(default_factory=list)
     reason: str = ""
 
 

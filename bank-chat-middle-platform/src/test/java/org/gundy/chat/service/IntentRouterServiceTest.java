@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class IntentRouterServiceTest {
-    private final IntentRouterService router = new IntentRouterService(new EntityExtractorService(), new SkillConfigService());
+    private final IntentRouterService router = new IntentRouterService(new EntityExtractorService());
 
     @Test
     void routesBankCustomerLevelQuestionToRag() {
@@ -20,11 +20,23 @@ class IntentRouterServiceTest {
     }
 
     @Test
-    void routesSpecificCustomerAumQuestionToCustomerAum() {
+    void leavesNaturalLanguageCustomerAumQuestionForSemanticRouter() {
         IntentRouteResult result = router.route(null, "查询客户张伟AUM", null, false);
 
-        assertThat(result.getRequestedSkill()).isEqualTo("CUSTOMER_AUM");
-        assertThat(result.getEntities().getCustomerNames()).contains("张伟");
+        assertThat(result.getRequestedSkill()).isNull();
+        assertThat(result.isForceSkill()).isFalse();
+        assertThat(result.getDialogAct()).isEqualTo("NO_DETERMINISTIC_ROUTE");
+        assertThat(result.getEntities().getCustomerNames()).isEmpty();
+    }
+
+    @Test
+    void leavesAmbiguousCustomerLevelQuestionForClarification() {
+        IntentRouteResult result = router.route(null, "帮我查一下客户等级", null, false);
+
+        assertThat(result.getRequestedSkill()).isNull();
+        assertThat(result.isForceSkill()).isFalse();
+        assertThat(result.getDialogAct()).isEqualTo("NO_DETERMINISTIC_ROUTE");
+        assertThat(result.getEntities().getBusinessTerms()).contains("客户等级");
     }
 
     @Test

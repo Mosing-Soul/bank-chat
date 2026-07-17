@@ -1,33 +1,36 @@
 import os
 import json
 
-import dotenv
 import requests
 from langchain_community.chat_models import ChatOpenAI
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
-# 加载嵌入模型
-dotenv.load_dotenv()  #加载当前目录下的 .env 文件
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from env_config import env_bool, env_float, env_path, require_env
 
 # 配置
-VECTOR_DB_DIR = "../chroma_db"
-RAG_SERVICE_URL = "http://127.0.0.1:8000/rag/eval_query"  # 你的 Python RAG 服务地址
-EVAL_FILE = "./eval_question_diff1.json"
-# os.environ['HTTP_PROXY'] = 'http://127.0.0.1:7890'
-# os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:7890'
+VECTOR_DB_DIR = str(env_path("VECTOR_DB_DIR"))
+RAG_SERVICE_URL = require_env("RAG_EVAL_SERVICE_URL")
+EVAL_FILE = str(env_path("RAG_EVAL_FILE"))
+REQUEST_TIMEOUT_SECONDS = env_float("RAG_EVAL_REQUEST_TIMEOUT_SECONDS")
 
-os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_API_KEY1")
-os.environ['OPENAI_BASE_URL'] = os.getenv("OPENAI_BASE_URL")
+os.environ['OPENAI_API_KEY'] = require_env("OPENAI_API_KEY1")
+os.environ['OPENAI_BASE_URL'] = require_env("OPENAI_BASE_URL")
 
-llm = ChatOpenAI(model="deepseek-v4-pro")
+llm = ChatOpenAI(model=require_env("CHAT_MODEL"))
 
 
 # 加载向量库（仅用于 Recall 评估，无需 LLM）
 embedding_model = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-small-zh-v1.5",
-    model_kwargs={'device': 'cpu', 'local_files_only': True},
+    model_name=require_env("EMBEDDING_MODEL_NAME"),
+    model_kwargs={
+        'device': require_env("EMBEDDING_DEVICE"),
+        'local_files_only': env_bool("EMBEDDING_LOCAL_FILES_ONLY"),
+    },
     encode_kwargs={'normalize_embeddings': True}
 )
 vectordb = Chroma(persist_directory=VECTOR_DB_DIR, embedding_function=embedding_model)
@@ -44,7 +47,7 @@ def call_rag(question, session_id="eval"):
             "question": question,
             "session_id": session_id,
             "history": []
-        }, timeout=300)
+        }, timeout=REQUEST_TIMEOUT_SECONDS)
         if resp.status_code == 200:
             return resp.json().get("answer", "")
         else:

@@ -1,4 +1,3 @@
-import dotenv
 from fastapi import FastAPI
 from langchain_community.chat_models import ChatOpenAI
 from langchain_community.llms.openai import OpenAIChat
@@ -30,6 +29,7 @@ from skill_handlers import (
     is_revision_message,
 )
 from skill_router import SkillRouter
+from env_config import env_bool, env_float, env_int, env_path, require_env
 
 app = FastAPI()
 logger = logging.getLogger(__name__)
@@ -38,13 +38,14 @@ BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR.parent
 
 # 存放文档的文件夹路径。默认指向 bank-agent-demo/bank_docs，避免受启动目录影响。
-DOCS_FOLDER = os.getenv("BANK_DOCS_FOLDER", str(APP_DIR / "bank_docs"))
+DOCS_FOLDER = str(env_path("BANK_DOCS_FOLDER"))
 
 # 向量库持久化目录（可配置）。容器部署优先使用 /app/chroma_db；本地开发使用 python/chroma_db。
-DEFAULT_VECTOR_DB_DIR = APP_DIR / "chroma_db" if (APP_DIR / "chroma_db").exists() else BASE_DIR / "chroma_db"
-VECTOR_DB_DIR = os.getenv("VECTOR_DB_DIR", str(DEFAULT_VECTOR_DB_DIR))
-RAG_SCORE_THRESHOLD = float(os.getenv("RAG_SCORE_THRESHOLD", "0.7"))
-RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
+VECTOR_DB_DIR = str(env_path("VECTOR_DB_DIR"))
+RAG_SCORE_THRESHOLD = env_float("RAG_SCORE_THRESHOLD")
+RAG_TOP_K = env_int("RAG_TOP_K")
+PYTHON_SERVICE_HOST = require_env("PYTHON_SERVICE_HOST")
+PYTHON_SERVICE_PORT = env_int("PYTHON_SERVICE_PORT")
 
 # ---------- 定义请求和响应的数据结构 ----------
 # 历史对话消息结构
@@ -68,25 +69,20 @@ class QueryResponse(BaseModel):
 
 
 
-# 中文 Embedding 模型（本地运行）
-# embedding_model = HuggingFaceEmbeddings(
-#     model_name="BAAI/bge-small-zh-v1.5",
-#     model_kwargs={'device': 'cpu'},
-#     encode_kwargs={'normalize_embeddings': True}
-# )
 # 加载嵌入模型
-dotenv.load_dotenv()  #加载当前目录下的 .env 文件
-
-os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_API_KEY1")
-os.environ['OPENAI_BASE_URL'] = os.getenv("OPENAI_BASE_URL")
+os.environ['OPENAI_API_KEY'] = require_env("OPENAI_API_KEY1")
+os.environ['OPENAI_BASE_URL'] = require_env("OPENAI_BASE_URL")
 
 embedding_model = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-small-zh-v1.5",
-    model_kwargs={'device': 'cpu', 'local_files_only': True},
+    model_name=require_env("EMBEDDING_MODEL_NAME"),
+    model_kwargs={
+        'device': require_env("EMBEDDING_DEVICE"),
+        'local_files_only': env_bool("EMBEDDING_LOCAL_FILES_ONLY"),
+    },
     encode_kwargs={'normalize_embeddings': True}
 )
 
-llm = ChatOpenAI(model="deepseek-v4-pro")
+llm = ChatOpenAI(model=require_env("CHAT_MODEL"))
 
 try:
     external_search_client = ExternalSearchClient()
@@ -376,13 +372,19 @@ async def ai_chat_invoke(request: AiChatRequest):
     error = None
     if not result.success:
         error = AiChatError(code=result.error_code or "SKILL_ERROR", message=result.error_message or "skill failed")
+    response_data = dict(result.data)
+    response_data["intentAnalysis"] = {
+        "missingSlots": intent.missingSlots,
+        "candidateIntents": [candidate.value for candidate in intent.candidateIntents],
+        "ambiguities": intent.ambiguities,
+    }
     return AiChatResponse(
         traceId=request.traceId,
         sessionId=request.sessionId,
         intent=intent.intent,
         confidence=intent.confidence,
         answer=result.answer or "请说明您想查询产品规则、客户资产、黄金行情，还是需要生成客户消息。",
-        data=result.data,
+        data=response_data,
         citations=result.citations,
         sources=[citation.source for citation in result.citations],
         requiresConfirmation=result.requires_confirmation,
@@ -421,4 +423,4 @@ async def refresh_vector_store():
 
 # ---------- 启动服务 ----------
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=PYTHON_SERVICE_HOST, port=PYTHON_SERVICE_PORT)

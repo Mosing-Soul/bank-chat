@@ -98,6 +98,19 @@ class AiChatTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(fallback_intent(text).intent, expected)
 
+    def test_semantic_entity_extraction_does_not_treat_customer_level_as_name(self):
+        result = fallback_intent("帮我查一下客户等级")
+
+        self.assertIsNone(result.entities.customerName)
+        self.assertNotEqual(result.intent, IntentType.CUSTOMER_AUM_QUERY)
+
+    def test_semantic_entity_extraction_extracts_explicit_customer_name(self):
+        result = fallback_intent("查询客户张伟当前AUM")
+
+        self.assertEqual(result.intent, IntentType.CUSTOMER_AUM_QUERY)
+        self.assertEqual(result.entities.customerName, "张伟")
+        self.assertEqual(result.missingSlots, [])
+
     def test_low_confidence_becomes_unknown(self):
         result = IntentRecognitionService(llm=None, threshold=0.9).recognize("黄金现在多少钱")
         self.assertEqual(result.intent, IntentType.UNKNOWN)
@@ -260,7 +273,13 @@ class AiChatTests(unittest.TestCase):
         def handler(request):
             return httpx.Response(500, json={"success": False, "error": {"code": "ERR", "message": "bad"}})
 
-        client = JavaSkillClient(base_url="http://java-skill", transport=httpx.MockTransport(handler))
+        client = JavaSkillClient(
+            base_url="http://java-skill",
+            api_key="test-key",
+            api_key_header="X-Test-Key",
+            timeout=1,
+            transport=httpx.MockTransport(handler),
+        )
         with self.assertRaises(JavaSkillClientError):
             client.search_customers("trace-1", "张伟")
 

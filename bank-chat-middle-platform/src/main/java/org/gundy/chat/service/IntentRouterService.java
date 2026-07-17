@@ -1,6 +1,5 @@
 package org.gundy.chat.service;
 
-import org.gundy.chat.entity.config.SkillExampleConfig;
 import org.gundy.chat.entity.dialog.DialogState;
 import org.gundy.chat.entity.intent.ExtractedEntities;
 import org.gundy.chat.entity.intent.IntentRouteResult;
@@ -9,12 +8,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class IntentRouterService {
     private final EntityExtractorService entityExtractorService;
-    private final SkillConfigService skillConfigService;
 
-    public IntentRouterService(EntityExtractorService entityExtractorService,
-                               SkillConfigService skillConfigService) {
+    public IntentRouterService(EntityExtractorService entityExtractorService) {
         this.entityExtractorService = entityExtractorService;
-        this.skillConfigService = skillConfigService;
     }
 
     public IntentRouteResult route(DialogState state, String userMessage, String requestedSkill, boolean forceSkill) {
@@ -34,20 +30,11 @@ public class IntentRouterService {
         }
 
         String text = safe(userMessage);
-        SkillExampleConfig matchedExample = skillConfigService.bestExampleMatch(text);
-        if (matchedExample != null) {
-            double score = skillConfigService.bestExampleScore(text, matchedExample);
-            return routeTo(result, matchedExample.getSkillCode(), Math.max(score, matchedExample.getConfidence()),
-                    "configured skill example: " + matchedExample.getExampleId());
-        }
         if (isInstitutionKnowledgeQuery(text, entities)) {
             return routeTo(result, "RAG_QUERY", 0.92D, "institution knowledge query");
         }
         if (isGoldPriceQuery(text, entities)) {
             return routeTo(result, "GOLD_PRICE", 0.9D, "market price query");
-        }
-        if (isCustomerAumQuery(text, entities)) {
-            return routeTo(result, "CUSTOMER_AUM", 0.88D, "specific customer data query");
         }
         if (isMessageSendQuery(text, entities)) {
             result.setRequestedSkill("MESSAGE_SEND");
@@ -88,14 +75,6 @@ public class IntentRouterService {
     private boolean isGoldPriceQuery(String text, ExtractedEntities entities) {
         return entities.hasMarketTerm()
                 && text.matches(".*(黄金|金价|Au9999|AU9999).*(价格|多少|查询|现在|行情|走势|怎么样).*");
-    }
-
-    private boolean isCustomerAumQuery(String text, ExtractedEntities entities) {
-        if (!entities.hasCustomerName()) {
-            return false;
-        }
-        return text.matches(".*(AUM|aum|资产|持仓|余额|客户等级).*(查询|查|多少|是多少).*")
-                || text.matches(".*(查询|查).*(AUM|aum|资产|持仓|余额|客户等级).*");
     }
 
     private boolean isMessageSendQuery(String text, ExtractedEntities entities) {

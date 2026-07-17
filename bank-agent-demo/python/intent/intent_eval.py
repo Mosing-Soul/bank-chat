@@ -1,21 +1,24 @@
 import json
 import os
 
-import dotenv
 from langchain_openai import ChatOpenAI
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from env_config import env_path, require_env
 
 from intent_classifier import classify_intent
 from intent_schema import IntentType
 
-# 加载嵌入模型
-dotenv.load_dotenv()  #加载当前目录下的 .env 文件
+os.environ['OPENAI_API_KEY'] = require_env("OPENAI_API_KEY1")
+os.environ['OPENAI_BASE_URL'] = require_env("OPENAI_BASE_URL")
 
-os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_API_KEY1")
-os.environ['OPENAI_BASE_URL'] = os.getenv("OPENAI_BASE_URL")
+llm = ChatOpenAI(model=require_env("CHAT_MODEL"))
 
-llm = ChatOpenAI(model="deepseek-v4-pro")
-
-def run_eval(eval_file="intent_eval.json"):
+def run_eval(eval_file=None):
+    eval_file = eval_file or str(env_path("INTENT_EVAL_FILE"))
     with open(eval_file, "r", encoding="utf-8") as f:
         cases = json.load(f)
 

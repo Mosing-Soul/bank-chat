@@ -52,11 +52,11 @@ public class IntentClarificationService {
         response.setSessionId(sessionId);
         response.setIntent("CLARIFICATION");
         response.setConfidence(aiResponse.getConfidence());
-        response.setAnswer("我不太确定您想办理哪类事项，请选择一个方向继续。");
+        response.setAnswer("已为您匹配到" + candidates.size() + "个相关办理方向，请选择更符合您需求的一项继续。");
         response.setRequiresConfirmation(true);
         Map<String, Object> confirmation = new LinkedHashMap<String, Object>();
         confirmation.put("type", "INTENT_CLARIFICATION");
-        confirmation.put("title", "请选择要办理的事项");
+        confirmation.put("title", "请选择办理方向");
         confirmation.put("originalMessage", userMessage);
         confirmation.put("candidates", candidates);
         confirmation.put("reason", clarifyReason(route, aiResponse));

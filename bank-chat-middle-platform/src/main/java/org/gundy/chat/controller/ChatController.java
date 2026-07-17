@@ -82,7 +82,7 @@ public class ChatController {
                 ChatResponse response = new ChatResponse();
                 response.setTraceId(traceId);
                 response.setSessionId(sessionId);
-                response.setIntent("MESSAGE_SEND");
+                response.setIntent(transitionIntent(transition));
                 response.setConfidence(0.95D);
                 response.setAnswer(transition.getAnswer());
                 response.setData(transition.getData());
@@ -153,5 +153,13 @@ public class ChatController {
 
     private boolean hasText(String value) {
         return value != null && value.trim().length() > 0;
+    }
+
+    private String transitionIntent(SkillTransitionResult transition) {
+        if (transition.getDialogState() != null && transition.getDialogState().getIntent() != null
+                && hasText(transition.getDialogState().getIntent().getCurrent())) {
+            return transition.getDialogState().getIntent().getCurrent();
+        }
+        return "STATE_MACHINE";
     }
 }

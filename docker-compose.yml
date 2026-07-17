@@ -17,12 +17,15 @@ services:
 #    image: bank-python-rag:1.0   # 可选，如果你已经构建好
     container_name: bank-python-rag
     restart: always
+    env_file:
+      - ./bank-agent-demo/.env
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JAVA_SKILL_BASE_URL=http://java-backend:8080/internal/skills
-      - INTERNAL_SKILL_API_KEY=local-dev-internal-key
-      - SERPER_API_KEY=${SERPER_API_KEY:-}
+      - BANK_DOCS_FOLDER=assets
+      - VECTOR_DB_DIR=chroma_db
+      - BUILD_DOCUMENTS_DIR=assets
+      - BUILD_VECTOR_DB_DIR=chroma_db
     volumes:
       - ./models:/root/.cache/huggingface
       - ./chroma_db:/app/chroma_db

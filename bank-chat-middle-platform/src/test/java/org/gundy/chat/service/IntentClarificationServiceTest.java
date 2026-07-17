@@ -23,7 +23,9 @@ class IntentClarificationServiceTest {
         assertThat(clarification).isNotNull();
         assertThat(clarification.getIntent()).isEqualTo("CLARIFICATION");
         assertThat(clarification.getRequiresConfirmation()).isTrue();
+        assertThat(clarification.getAnswer()).startsWith("已为您匹配到").contains("相关办理方向");
         assertThat(clarification.getConfirmation()).containsEntry("type", "INTENT_CLARIFICATION");
+        assertThat(clarification.getConfirmation()).containsEntry("title", "请选择办理方向");
         assertThat(clarification.getConfirmation().get("candidates")).isNotNull();
     }
 

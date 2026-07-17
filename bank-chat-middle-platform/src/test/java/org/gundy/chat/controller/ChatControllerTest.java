@@ -124,7 +124,7 @@ class ChatControllerTest {
         ChatResponse clarification = new ChatResponse();
         clarification.setIntent("CLARIFICATION");
         clarification.setRequiresConfirmation(true);
-        clarification.setAnswer("我不太确定您想办理哪类事项，请选择一个方向继续。");
+        clarification.setAnswer("已为您匹配到2个相关办理方向，请选择更符合您需求的一项继续。");
         Map<String, Object> confirmation = new LinkedHashMap<String, Object>();
         confirmation.put("type", "INTENT_CLARIFICATION");
         confirmation.put("originalMessage", "帮我查一下客户等级");
@@ -138,6 +138,7 @@ class ChatControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.intent", is("CLARIFICATION")))
                 .andExpect(jsonPath("$.requiresConfirmation", is(true)))
+                .andExpect(jsonPath("$.answer", is("已为您匹配到2个相关办理方向，请选择更符合您需求的一项继续。")))
                 .andExpect(jsonPath("$.confirmation.type", is("INTENT_CLARIFICATION")))
                 .andExpect(jsonPath("$.confirmation.originalMessage", is("帮我查一下客户等级")));
     }

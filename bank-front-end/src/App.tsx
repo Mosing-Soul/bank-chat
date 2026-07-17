@@ -1036,11 +1036,7 @@ function ConfirmationCard({
     const originalMessage = confirmation.originalMessage || '';
     return (
       <div className="confirmation-card intent-confirmation-card">
-        <div className="confirmation-title">{confirmation.title || '请选择要办理的事项'}</div>
-        <div className="confirmation-field">
-          <span>原问题</span>
-          <p>{originalMessage || '-'}</p>
-        </div>
+        <div className="confirmation-title">{confirmation.title || '请选择办理方向'}</div>
         <div className="intent-candidate-list">
           {(confirmation.candidates || []).map((candidate) => (
             <button

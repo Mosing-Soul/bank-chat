@@ -1,0 +1,40 @@
+[
+  {
+    "name": "message_interrupted_by_pronoun_aum_then_resume",
+    "initialFlowStack": [
+      {"instanceId": "msg-1", "skillId": "MESSAGE_SEND", "status": "ACTIVE", "currentStage": "WAITING_CONFIRMATION",
+       "slots": {"customerReference": "flow-slot://msg-1/customerReference"}}
+    ],
+    "turns": [
+      {"user": "先查一下他的AUM", "commands": ["SUSPEND_FLOW", "START_FLOW"],
+       "lastTargetSkill": "CUSTOMER_AUM", "lastSlots": {"customerReference": "flow-slot://msg-1/customerReference"}},
+      {"user": "继续刚才的消息", "commands": ["RESUME_FLOW"], "lastTargetSkill": "MESSAGE_SEND"},
+      {"user": "确认发送", "commands": ["CONFIRM"], "lastTargetSkill": "MESSAGE_SEND"}
+    ]
+  },
+  {
+    "name": "bare_name_is_slot_answer_not_new_intent",
+    "initialFlowStack": [
+      {"instanceId": "aum-1", "skillId": "CUSTOMER_AUM", "status": "ACTIVE", "currentStage": "COLLECTING_SLOTS", "slots": {}}
+    ],
+    "turns": [
+      {"user": "张伟", "commands": ["SET_SLOT"], "lastTargetSkill": "CUSTOMER_AUM",
+       "lastSlot": "customerReference", "lastValue": "张伟"}
+    ]
+  },
+  {
+    "name": "ambiguous_switch_requires_clarification",
+    "initialFlowStack": [],
+    "turns": [
+      {"user": "换个问题", "commands": ["REQUEST_CLARIFICATION"]}
+    ]
+  },
+  {
+    "name": "gold_query_keeps_original_question",
+    "initialFlowStack": [],
+    "turns": [
+      {"user": "Au9999现在多少钱", "commands": ["START_FLOW"], "lastTargetSkill": "GOLD_PRICE",
+       "lastSlots": {"query": "Au9999现在多少钱"}}
+    ]
+  }
+]

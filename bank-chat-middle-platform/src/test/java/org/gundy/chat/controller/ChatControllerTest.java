@@ -6,6 +6,7 @@ import org.gundy.chat.entity.intent.IntentRouteResult;
 import org.gundy.chat.service.AiChatService;
 import org.gundy.chat.service.DialogStateMachineService;
 import org.gundy.chat.service.DialogStateService;
+import org.gundy.chat.service.DialogueOrchestrationService;
 import org.gundy.chat.service.IntentClarificationService;
 import org.gundy.chat.service.IntentRouterService;
 import org.gundy.chat.service.MemoryService;
@@ -48,6 +49,9 @@ class ChatControllerTest {
 
     @MockBean
     private DialogStateService dialogStateService;
+
+    @MockBean
+    private DialogueOrchestrationService dialogueOrchestrationService;
 
     @MockBean
     private DialogStateMachineService dialogStateMachineService;

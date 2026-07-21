@@ -44,6 +44,9 @@ services:
       - REDIS_HOST=redis
       - RAG_SERVICE_URL=http://python-rag:8000/rag/query
       - AI_CHAT_URL=http://python-rag:8000/ai/chat/invoke
+      - AI_DIALOGUE_COMMAND_URL=http://python-rag:8000/ai/dialogue/commands
+      - AI_DIALOGUE_COMMAND_ENABLED=true
+      - AI_DIALOGUE_AUTO_RESUME_READ_ONLY=true
     networks:
       - bank-net
     depends_on:

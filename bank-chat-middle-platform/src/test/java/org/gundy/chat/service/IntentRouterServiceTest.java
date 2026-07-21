@@ -20,12 +20,12 @@ class IntentRouterServiceTest {
     }
 
     @Test
-    void leavesNaturalLanguageCustomerAumQuestionForSemanticRouter() {
+    void routesExplicitCustomerAumQuestionToFlowPilot() {
         IntentRouteResult result = router.route(null, "查询客户张伟AUM", null, false);
 
-        assertThat(result.getRequestedSkill()).isNull();
-        assertThat(result.isForceSkill()).isFalse();
-        assertThat(result.getDialogAct()).isEqualTo("NO_DETERMINISTIC_ROUTE");
+        assertThat(result.getRequestedSkill()).isEqualTo("CUSTOMER_AUM");
+        assertThat(result.isForceSkill()).isTrue();
+        assertThat(result.getDialogAct()).isEqualTo("ROUTER_SWITCH_INTENT");
         assertThat(result.getEntities().getCustomerNames()).isEmpty();
     }
 

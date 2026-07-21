@@ -5,22 +5,18 @@ import org.gundy.chat.flow.FlowEngine;
 import org.springframework.stereotype.Component;
 
 @Component
-public class CustomerAumStateMachine implements SkillStateMachine {
-    public static final String SKILL = "CUSTOMER_AUM";
-
+public class RagQueryStateMachine implements SkillStateMachine {
     private final FlowEngine flowEngine;
 
-    public CustomerAumStateMachine(FlowEngine flowEngine) {
-        this.flowEngine = flowEngine;
-    }
+    public RagQueryStateMachine(FlowEngine flowEngine) { this.flowEngine = flowEngine; }
 
-    public String skillName() { return SKILL; }
+    public String skillName() { return "RAG_QUERY"; }
 
     public boolean supports(DialogState state, String userMessage) {
-        return state != null && SKILL.equals(state.getActiveSkill());
+        return state != null && "RAG_QUERY".equals(state.getActiveSkill());
     }
 
     public SkillTransitionResult handle(String traceId, String sessionId, DialogState state, String userMessage) {
-        return flowEngine.handle(traceId, sessionId, state, SKILL, userMessage);
+        return flowEngine.handle(traceId, sessionId, state, skillName(), userMessage);
     }
 }

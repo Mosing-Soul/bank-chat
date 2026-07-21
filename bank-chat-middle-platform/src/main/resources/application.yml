@@ -3,6 +3,10 @@ rag:
     url: ${RAG_SERVICE_URL:http://localhost:8000/rag/query}
 
 ai:
+  dialogue-command:
+    enabled: ${AI_DIALOGUE_COMMAND_ENABLED:true}
+    url: ${AI_DIALOGUE_COMMAND_URL:http://localhost:8000/ai/dialogue/commands}
+    auto-resume-read-only: ${AI_DIALOGUE_AUTO_RESUME_READ_ONLY:true}
   chat:
     url: ${AI_CHAT_URL:http://localhost:8000/ai/chat/invoke}
 

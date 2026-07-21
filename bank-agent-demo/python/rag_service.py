@@ -12,7 +12,9 @@ import logging
 from pathlib import Path
 
 from document_loader import load_document
-from ai_chat_models import AiChatError, AiChatRequest, AiChatResponse, IntentType, SkillRequest
+from ai_chat_models import (AiChatError, AiChatRequest, AiChatResponse, DialogueCommandRequest,
+                            DialogueCommandResponse, IntentType, SkillRequest)
+from dialogue.command_interpreter import DialogueCommandInterpreter
 from external_search_client import ExternalSearchClient, ExternalSearchConfigError
 from intent.structured_intent import IntentRecognitionService
 from java_skill_client import JavaSkillClient
@@ -392,6 +394,12 @@ async def ai_chat_invoke(request: AiChatRequest):
         skillCalls=[call],
         error=error,
     )
+
+
+@app.post("/ai/dialogue/commands", response_model=DialogueCommandResponse)
+async def dialogue_commands(request: DialogueCommandRequest):
+    """影子命令理解接口；Java策略层验证后才能执行返回的命令。"""
+    return DialogueCommandInterpreter(llm).interpret(request)
 
 
 def forced_intent_from_skill(skill: Optional[str]) -> Optional[IntentType]:

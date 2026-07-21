@@ -30,6 +30,9 @@ public class IntentRouterService {
         }
 
         String text = safe(userMessage);
+        if (isExplicitCustomerAumQuery(text)) {
+            return routeTo(result, "CUSTOMER_AUM", 0.94D, "explicit customer asset query");
+        }
         if (isInstitutionKnowledgeQuery(text, entities)) {
             return routeTo(result, "RAG_QUERY", 0.92D, "institution knowledge query");
         }
@@ -50,6 +53,17 @@ public class IntentRouterService {
         result.setReason("no deterministic route");
         result.setDialogAct("NO_DETERMINISTIC_ROUTE");
         return result;
+    }
+
+    private boolean isExplicitCustomerAumQuery(String text) {
+        if (text.matches(".*(规则|制度|办法|怎么划分|如何划分).*")) {
+            return false;
+        }
+        if (text.matches(".*(AUM|aum).*")) {
+            return true;
+        }
+        return text.matches(".*(查询|查一下|查|多少|当前).*(客户|CUST\\d+).*(资产|持仓).*")
+                || text.matches(".*(客户|CUST\\d+).*(资产|持仓).*(查询|查一下|查|多少|当前).*");
     }
 
     private IntentRouteResult routeTo(IntentRouteResult result, String skill, double confidence, String reason) {
@@ -83,23 +97,7 @@ public class IntentRouterService {
     }
 
     private String normalizeSkill(String skillName) {
-        if (skillName == null || skillName.trim().length() == 0) {
-            return null;
-        }
-        String value = skillName.trim().toUpperCase();
-        if ("MESSAGE".equals(value) || "MESSAGE_SEND".equals(value)) {
-            return "MESSAGE_SEND";
-        }
-        if ("RAG".equals(value) || "RAG_QUERY".equals(value) || "RULE_QUERY".equals(value)) {
-            return "RAG_QUERY";
-        }
-        if ("CUSTOMER_AUM".equals(value) || "AUM".equals(value)) {
-            return "CUSTOMER_AUM";
-        }
-        if ("GOLD".equals(value) || "GOLD_PRICE".equals(value)) {
-            return "GOLD_PRICE";
-        }
-        return value;
+        return LegacyIntentFallback.normalizeSkill(skillName);
     }
 
     private String safe(String text) {

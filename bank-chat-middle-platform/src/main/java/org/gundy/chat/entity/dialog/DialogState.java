@@ -1,5 +1,9 @@
 package org.gundy.chat.entity.dialog;
 
+import org.gundy.chat.entity.flow.FlowInstance;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -12,6 +16,7 @@ public class DialogState {
     private String activeFlowId;
     private DialogIntent intent;
     private Map<String, SkillDialogState> skills = new LinkedHashMap<String, SkillDialogState>();
+    private List<FlowInstance> flowStack = new ArrayList<FlowInstance>();
     private Map<String, Object> plan;
     private DialogUiHints ui;
     private String updatedAt;
@@ -32,6 +37,8 @@ public class DialogState {
     public void setIntent(DialogIntent intent) { this.intent = intent; }
     public Map<String, SkillDialogState> getSkills() { return skills; }
     public void setSkills(Map<String, SkillDialogState> skills) { this.skills = skills; }
+    public List<FlowInstance> getFlowStack() { return flowStack; }
+    public void setFlowStack(List<FlowInstance> flowStack) { this.flowStack = flowStack; }
     public Map<String, Object> getPlan() { return plan; }
     public void setPlan(Map<String, Object> plan) { this.plan = plan; }
     public DialogUiHints getUi() { return ui; }

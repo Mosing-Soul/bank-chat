@@ -13,6 +13,75 @@ class IntentType(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class DialogCommandType(str, Enum):
+    START_FLOW = "START_FLOW"
+    SUSPEND_FLOW = "SUSPEND_FLOW"
+    RESUME_FLOW = "RESUME_FLOW"
+    CANCEL_FLOW = "CANCEL_FLOW"
+    SET_SLOT = "SET_SLOT"
+    CLEAR_SLOT = "CLEAR_SLOT"
+    CONFIRM = "CONFIRM"
+    REJECT = "REJECT"
+    REQUEST_CLARIFICATION = "REQUEST_CLARIFICATION"
+    NO_OP = "NO_OP"
+
+
+class HistoryMessage(BaseModel):
+    role: str
+    content: str
+
+
+class DialogCommand(BaseModel):
+    commandId: Optional[str] = None
+    type: DialogCommandType
+    targetSkill: Optional[str] = None
+    targetFlowInstanceId: Optional[str] = None
+    slot: Optional[str] = None
+    value: Optional[Any] = None
+    slots: Dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    reason: str = ""
+
+
+class DialogueFlowSnapshot(BaseModel):
+    instanceId: str
+    skillId: str
+    status: str
+    currentStage: str
+    slots: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DialogueSkillSnapshot(BaseModel):
+    id: str
+    name: str
+    description: str
+    riskLevel: str
+    interruptPolicy: str
+    slots: List[str] = Field(default_factory=list)
+
+
+class DialogueCommandRequest(BaseModel):
+    traceId: str
+    sessionId: str
+    message: str
+    flowStack: List[DialogueFlowSnapshot] = Field(default_factory=list)
+    candidateSkills: List[DialogueSkillSnapshot] = Field(default_factory=list)
+    history: List[HistoryMessage] = Field(default_factory=list)
+
+
+class DialogueCommandResponse(BaseModel):
+    traceId: str
+    sessionId: str
+    commands: List[DialogCommand] = Field(default_factory=list)
+    modelUsed: bool = False
+    reason: str = ""
+
+
+class DialogueCommandPlan(BaseModel):
+    commands: List[DialogCommand] = Field(default_factory=list)
+    reason: str = ""
+
+
 class IntentEntities(BaseModel):
     customerName: Optional[str] = None
     customerId: Optional[str] = None
@@ -33,11 +102,6 @@ class IntentResult(BaseModel):
     candidateIntents: List[IntentType] = Field(default_factory=list)
     ambiguities: List[str] = Field(default_factory=list)
     reason: str = ""
-
-
-class HistoryMessage(BaseModel):
-    role: str
-    content: str
 
 
 class AiChatRequest(BaseModel):

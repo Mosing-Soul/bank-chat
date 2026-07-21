@@ -1,6 +1,11 @@
 package org.gundy.chat.statemachine;
 
 import org.gundy.chat.entity.dialog.DialogState;
+import org.gundy.chat.flow.FlowEngine;
+import org.gundy.chat.flow.FlowSkillHandler;
+import org.gundy.chat.flow.MessageSendFlowHandler;
+import org.gundy.chat.service.SkillDefinitionRegistry;
+import org.gundy.chat.service.SkillDefinitionValidator;
 import org.gundy.chat.skill.dto.CustomerSummaryResponse;
 import org.gundy.chat.skill.dto.MessagePreviewRequest;
 import org.gundy.chat.skill.dto.MessagePreviewResponse;
@@ -12,6 +17,8 @@ import org.gundy.chat.skill.enums.RiskLevel;
 import org.gundy.chat.skill.service.CustomerSkillService;
 import org.gundy.chat.skill.service.MessageSkillService;
 import org.junit.jupiter.api.Test;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.core.io.DefaultResourceLoader;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -22,6 +29,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 class MessageSendStateMachineTest {
@@ -30,7 +39,7 @@ class MessageSendStateMachineTest {
     void completesMessageSendFlowWithConfirmation() {
         CustomerSkillService customerSkillService = mock(CustomerSkillService.class);
         MessageSkillService messageSkillService = mock(MessageSkillService.class);
-        MessageSendStateMachine stateMachine = new MessageSendStateMachine(customerSkillService, messageSkillService);
+        MessageSendStateMachine stateMachine = machine(customerSkillService, messageSkillService);
 
         when(customerSkillService.searchCustomers("\u5f20\u4f1f")).thenReturn(Collections.singletonList(
                 new CustomerSummaryResponse("C001", "\u5f20\u4f1f", CustomerLevel.PRIVATE_BANKING, RiskLevel.C3_BALANCED, true)
@@ -63,7 +72,7 @@ class MessageSendStateMachineTest {
     void fillsPurposeAfterCustomerOnlyMessageSendRequest() {
         CustomerSkillService customerSkillService = mock(CustomerSkillService.class);
         MessageSkillService messageSkillService = mock(MessageSkillService.class);
-        MessageSendStateMachine stateMachine = new MessageSendStateMachine(customerSkillService, messageSkillService);
+        MessageSendStateMachine stateMachine = machine(customerSkillService, messageSkillService);
 
         when(customerSkillService.searchCustomers("\u5f20\u4f1f")).thenReturn(Collections.singletonList(
                 new CustomerSummaryResponse("C001", "\u5f20\u4f1f", CustomerLevel.PRIVATE_BANKING, RiskLevel.C3_BALANCED, true)
@@ -77,7 +86,7 @@ class MessageSendStateMachineTest {
         assertThat(askPurposeResult.isRequiresConfirmation()).isFalse();
         assertThat(askPurposeResult.getDialogState().getActiveSkill()).isEqualTo(MessageSendStateMachine.SKILL);
         assertThat(askPurposeResult.getDialogState().getSkills().get(MessageSendStateMachine.SKILL).getSlots())
-                .containsEntry("customerName", "\u5f20\u4f1f");
+                .containsEntry("customerReference", "\u5f20\u4f1f");
 
         SkillTransitionResult previewResult = stateMachine.handle("trace-2", "session-1",
                 askPurposeResult.getDialogState(), "\u4ea7\u54c1\u5230\u671f\u63d0\u9192");
@@ -87,6 +96,28 @@ class MessageSendStateMachineTest {
         assertThat(previewResult.getConfirmation()).containsEntry("customerName", "\u5f20\u4f1f");
         verify(customerSkillService).searchCustomers(eq("\u5f20\u4f1f"));
         verify(messageSkillService).preview(any(MessagePreviewRequest.class));
+    }
+
+    @Test
+    void revisionCreatesANewPreviewWithoutSending() {
+        CustomerSkillService customerSkillService = mock(CustomerSkillService.class);
+        MessageSkillService messageSkillService = mock(MessageSkillService.class);
+        MessageSendStateMachine stateMachine = machine(customerSkillService, messageSkillService);
+        when(customerSkillService.searchCustomers("张伟")).thenReturn(Collections.singletonList(
+                new CustomerSummaryResponse("C001", "张伟", CustomerLevel.PRIVATE_BANKING, RiskLevel.C3_BALANCED, true)));
+        when(messageSkillService.preview(any(MessagePreviewRequest.class))).thenReturn(preview());
+
+        SkillTransitionResult first = stateMachine.handle("trace-1", "session-1", null,
+                "给张伟发送产品到期提醒");
+        SkillTransitionResult revised = stateMachine.handle("trace-2", "session-1", first.getDialogState(),
+                "修改为请尽快联系客户经理");
+
+        assertThat(revised.isRequiresConfirmation()).isTrue();
+        assertThat(revised.isTerminal()).isFalse();
+        assertThat(revised.getDialogState().getFlowStack().get(0).getSlots())
+                .containsEntry("messagePurpose", "请尽快联系客户经理");
+        verify(messageSkillService, times(2)).preview(any(MessagePreviewRequest.class));
+        verify(messageSkillService, never()).send(any(MessageSendRequest.class));
     }
 
     private MessagePreviewResponse preview() {
@@ -101,6 +132,15 @@ class MessageSendStateMachineTest {
         response.setExpiresAt(OffsetDateTime.now(ZoneOffset.ofHours(8)).plusMinutes(10));
         response.setMock(true);
         return response;
+    }
+
+    private MessageSendStateMachine machine(CustomerSkillService customerService, MessageSkillService messageService) {
+        SkillDefinitionRegistry registry = new SkillDefinitionRegistry(new ObjectMapper(),
+                new DefaultResourceLoader(), new SkillDefinitionValidator(),
+                "classpath:config/skill-definitions.json");
+        FlowSkillHandler handler = new MessageSendFlowHandler(customerService, messageService);
+        FlowEngine engine = new FlowEngine(registry, Collections.singletonList(handler));
+        return new MessageSendStateMachine(engine);
     }
 
     private MessageSendResponse sent() {

@@ -8,6 +8,7 @@ import org.gundy.chat.entity.intent.IntentRouteResult;
 import org.gundy.chat.service.AiChatService;
 import org.gundy.chat.service.DialogStateMachineService;
 import org.gundy.chat.service.DialogStateService;
+import org.gundy.chat.service.DialogueOrchestrationService;
 import org.gundy.chat.service.IntentClarificationService;
 import org.gundy.chat.service.IntentRouterService;
 import org.gundy.chat.service.MemoryService;
@@ -35,6 +36,7 @@ public class ChatController {
     private final AiChatService aiChatService;
     private final DialogStateService dialogStateService;
     private final DialogStateMachineService dialogStateMachineService;
+    private final DialogueOrchestrationService dialogueOrchestrationService;
     private final IntentClarificationService intentClarificationService;
     private final IntentRouterService intentRouterService;
     private final SkillConfigService skillConfigService;
@@ -43,6 +45,7 @@ public class ChatController {
                           AiChatService aiChatService,
                           DialogStateService dialogStateService,
                           DialogStateMachineService dialogStateMachineService,
+                          DialogueOrchestrationService dialogueOrchestrationService,
                           IntentClarificationService intentClarificationService,
                           IntentRouterService intentRouterService,
                           SkillConfigService skillConfigService) {
@@ -50,6 +53,7 @@ public class ChatController {
         this.aiChatService = aiChatService;
         this.dialogStateService = dialogStateService;
         this.dialogStateMachineService = dialogStateMachineService;
+        this.dialogueOrchestrationService = dialogueOrchestrationService;
         this.intentClarificationService = intentClarificationService;
         this.intentRouterService = intentRouterService;
         this.skillConfigService = skillConfigService;
@@ -70,6 +74,13 @@ public class ChatController {
             }
 
             org.gundy.chat.entity.dialog.DialogState dialogState = dialogStateService.getState(sessionId);
+            List<HistoryMessage> currentHistory = memoryService.getHistory(sessionId);
+            SkillTransitionResult commandTransition = dialogueOrchestrationService.tryHandle(
+                    traceId, sessionId, userMessage, dialogState, currentHistory,
+                    request.getRequestedSkill(), request.forceSkill());
+            if (commandTransition != null && commandTransition.isHandled()) {
+                return transitionResponse(traceId, sessionId, userMessage, commandTransition, start, "COMMAND_FLOW");
+            }
             IntentRouteResult route = intentRouterService.route(dialogState, userMessage,
                     request.getRequestedSkill(), request.forceSkill());
             String effectiveRequestedSkill = hasText(route.getRequestedSkill()) ? route.getRequestedSkill() : request.getRequestedSkill();
@@ -79,28 +90,7 @@ public class ChatController {
                     traceId, sessionId, dialogState, userMessage,
                     effectiveRequestedSkill, effectiveForceSkill);
             if (transition != null && transition.isHandled()) {
-                ChatResponse response = new ChatResponse();
-                response.setTraceId(traceId);
-                response.setSessionId(sessionId);
-                response.setIntent(transitionIntent(transition));
-                response.setConfidence(0.95D);
-                response.setAnswer(transition.getAnswer());
-                response.setData(transition.getData());
-                response.setRequiresConfirmation(transition.isRequiresConfirmation());
-                response.setConfirmation(transition.getConfirmation());
-                response.setDialogState(transition.getDialogState());
-                if (transition.isTerminal()) {
-                    dialogStateService.clearState(sessionId);
-                } else {
-                    dialogStateService.saveState(sessionId, transition.getDialogState());
-                }
-                if (hasText(response.getAnswer())) {
-                    memoryService.addConversation(sessionId, userMessage, response.getAnswer());
-                }
-                log.info("sessionId={}, intent={}, status={}, durationMs={}",
-                        sessionId, response.getIntent(), "STATE_MACHINE",
-                        System.currentTimeMillis() - start);
-                return ResponseEntity.ok(response);
+                return transitionResponse(traceId, sessionId, userMessage, transition, start, "STATE_MACHINE");
             }
             boolean clearStateBeforeAi = (transition != null && transition.isClearState()) || route.isClearHistory();
             if (clearStateBeforeAi) {
@@ -109,7 +99,7 @@ public class ChatController {
 
             List<HistoryMessage> history = clearStateBeforeAi
                     ? Collections.<HistoryMessage>emptyList()
-                    : memoryService.getHistory(sessionId);
+                    : currentHistory;
             ChatResponse response = aiChatService.invoke(traceId, sessionId, userMessage, history,
                     effectiveRequestedSkill, effectiveForceSkill, route.getRequestedSkill(),
                     route.getConfidence(), route.entityMap(), route.getDialogAct(),
@@ -151,8 +141,37 @@ public class ChatController {
         return request != null && hasText(request.getSessionId()) ? request.getSessionId() : UUID.randomUUID().toString();
     }
 
+    private ResponseEntity<ChatResponse> transitionResponse(String traceId, String sessionId, String userMessage,
+                                                            SkillTransitionResult transition, long start,
+                                                            String status) {
+        ChatResponse response = new ChatResponse();
+        response.setTraceId(traceId);
+        response.setSessionId(sessionId);
+        response.setIntent(transitionIntent(transition));
+        response.setConfidence(0.95D);
+        response.setAnswer(transition.getAnswer());
+        response.setData(transition.getData());
+        response.setRequiresConfirmation(transition.isRequiresConfirmation());
+        response.setConfirmation(transition.getConfirmation());
+        response.setDialogState(transition.getDialogState());
+        if (transition.isTerminal() && !hasRetainedFlow(transition.getDialogState())) dialogStateService.clearState(sessionId);
+        else dialogStateService.saveState(sessionId, transition.getDialogState());
+        if (hasText(response.getAnswer())) memoryService.addConversation(sessionId, userMessage, response.getAnswer());
+        log.info("sessionId={}, intent={}, status={}, durationMs={}", sessionId, response.getIntent(), status,
+                System.currentTimeMillis() - start);
+        return ResponseEntity.ok(response);
+    }
+
     private boolean hasText(String value) {
         return value != null && value.trim().length() > 0;
+    }
+
+    private boolean hasRetainedFlow(org.gundy.chat.entity.dialog.DialogState state) {
+        if (state == null || state.getFlowStack() == null) return false;
+        for (org.gundy.chat.entity.flow.FlowInstance flow : state.getFlowStack()) {
+            if ("SUSPENDED".equals(flow.getStatus()) || "ACTIVE".equals(flow.getStatus())) return true;
+        }
+        return false;
     }
 
     private String transitionIntent(SkillTransitionResult transition) {

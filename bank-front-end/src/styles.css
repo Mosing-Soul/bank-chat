@@ -1226,7 +1226,11 @@ button.greeting-line {
 }
 
 .intent-confirmation-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.86));
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .intent-candidate-list {

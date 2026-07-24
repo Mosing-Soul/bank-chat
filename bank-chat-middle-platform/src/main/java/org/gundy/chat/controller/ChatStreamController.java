@@ -28,7 +28,7 @@ public class ChatStreamController {
                              @RequestHeader(value = "X-Trace-Id", required = false) String requestTraceId) {
         final String traceId = requestTraceId == null || requestTraceId.trim().length() == 0
                 ? UUID.randomUUID().toString() : requestTraceId;
-        final SseEmitter emitter = new SseEmitter(35000L);
+        final SseEmitter emitter = new SseEmitter(125000L);
         CompletableFuture.runAsync(() -> {
             DialogueProgress.install(event -> send(emitter, "progress", event));
             try {

@@ -229,7 +229,9 @@ class AiChatTests(unittest.TestCase):
             skill_request(IntentType.EXTERNAL_API_QUERY, message="黄金现在多少钱")
         )
         self.assertTrue(result.success)
-        self.assertEqual(result.answer, "external answer")
+        self.assertTrue(result.answer.startswith("external answer"))
+        self.assertIn("公开网络搜索", result.answer)
+        self.assertIn("正规交易平台", result.answer)
         self.assertEqual(result.data["externalApi"]["provider"], "google-serper")
 
     def test_external_model_api_requires_search_client(self):

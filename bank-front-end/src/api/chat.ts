@@ -1,6 +1,6 @@
 import type { ChatProgressEvent, ChatRequest, ChatResponse, SkillConfigResponse } from '../types/chat';
 
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 120_000;
 
 export const sendChatMessage = async (
   payload: ChatRequest,

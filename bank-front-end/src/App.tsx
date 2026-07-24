@@ -23,6 +23,8 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { App as AntApp, Button, Input, Slider, Switch, Tooltip } from 'antd';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
 import type { ChatMessage, ChatProgressEvent, SkillConfig, SkillExampleConfig } from './types/chat';
 import {
@@ -997,7 +999,13 @@ function MessageBubble({
         </div>
       ) : null}
       <div className="message-bubble">
-        {message.content}
+        {isUser ? (
+          message.content
+        ) : (
+          <div className="markdown-content">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+          </div>
+        )}
         {streaming ? <span className="stream-caret" /> : null}
         {!isUser && message.confirmation ? (
           <ConfirmationCard confirmation={message.confirmation} onAction={onAction} onRevise={onRevise} />

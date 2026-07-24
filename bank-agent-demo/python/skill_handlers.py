@@ -134,6 +134,10 @@ class CustomerAumSkill(SkillHandler):
 
 class ExternalModelApiSkill(SkillHandler):
     skill_name = "external-model-api"
+    MARKET_DATA_NOTICE = (
+        "> 💡 温馨提示：以上行情来自公开网络搜索，可能存在时间延迟，仅供参考；"
+        "实际交易请以正规交易平台的最新报价为准。"
+    )
 
     def __init__(self, search_client=None, llm=None):
         self.search_client = search_client
@@ -152,7 +156,7 @@ class ExternalModelApiSkill(SkillHandler):
             answer = self._compose_answer(request.user_message, search_result)
             return SkillResult(
                 success=True,
-                answer=answer,
+                answer=f"{answer.rstrip()}\n\n{self.MARKET_DATA_NOTICE}",
                 data={"externalApi": {"provider": "google-serper", "mock": False}},
             )
         except Exception as exc:
@@ -168,7 +172,9 @@ class ExternalModelApiSkill(SkillHandler):
             return search_result
         prompt = (
             "你是银行客户经理助手中的外部信息查询模块。请只基于以下搜索结果回答用户问题，"
-            "回答要简洁，并说明这是外部搜索结果；如果搜索结果不足，请明确说明不确定性。\n\n"
+            "回答要简洁，并说明这是外部搜索结果；如果搜索结果不足，请明确说明不确定性。"
+            "使用清晰的 Markdown 排版：先给简短结论，再用项目列表整理不同品种的价格和时间；"
+            "不得把历史日期的价格描述成当前实时价格。\n\n"
             f"用户问题：{question}\n\n"
             f"搜索结果：\n{search_result}\n\n"
             "回答："

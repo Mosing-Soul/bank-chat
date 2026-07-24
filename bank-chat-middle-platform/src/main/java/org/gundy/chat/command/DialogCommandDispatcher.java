@@ -183,6 +183,9 @@ public class DialogCommandDispatcher {
         }
         Object resolved = source.getSlots().get(sourceSlot.getId());
         if (resolved == null) throw new IllegalArgumentException("referenced slot has no value");
+        if (resolved instanceof String && ((String) resolved).startsWith("flow-slot://")) {
+            throw new IllegalArgumentException("referenced slot contains an unresolved reference");
+        }
         return resolved;
     }
 

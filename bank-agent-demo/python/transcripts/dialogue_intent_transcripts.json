@@ -11,7 +11,8 @@
     "name": "message_interrupted_by_pronoun_aum_then_resume",
     "initialFlowStack": [
       {"instanceId": "msg-1", "skillId": "MESSAGE_SEND", "status": "ACTIVE", "currentStage": "WAITING_CONFIRMATION",
-       "slots": {"customerReference": "flow-slot://msg-1/customerReference"}}
+       "slots": {"customerReference": "张伟", "customerId": "CUST001", "customerName": "张伟",
+                 "messagePurpose": "产品到期提醒"}}
     ],
     "turns": [
       {"user": "先查一下他的AUM", "commands": ["SUSPEND_FLOW", "START_FLOW"],

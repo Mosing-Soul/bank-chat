@@ -199,7 +199,12 @@ def merge_deterministic_slots(model_commands: List[DialogCommand], fallback_comm
                        and item.targetSkill == fallback.targetSkill), None)
         if target:
             for slot, value in fallback.slots.items():
-                target.slots.setdefault(slot, value)
+                # 跨 Flow 引用来自服务端 Flow Stack，比模型从“他/该客户”等话语中
+                # 猜出的字面值更可靠，必须覆盖“一下他”之类的错误实体抽取。
+                if isinstance(value, str) and value.startswith("flow-slot://"):
+                    target.slots[slot] = value
+                else:
+                    target.slots.setdefault(slot, value)
 
 
 def _entity_with_customer(customer_name):
@@ -213,9 +218,13 @@ def refers_to_prior_customer(text: str) -> bool:
 
 def prior_customer_reference(flows: List[DialogueFlowSnapshot]):
     for flow in reversed(flows):
+        if flow.status == "CANCELLED":
+            continue
         value = flow.slots.get("customerReference")
-        if isinstance(value, str) and value.startswith("flow-slot://"):
-            return value
+        if value is not None and str(value).strip():
+            # Flow 内保存的是已经解析后的真实槽位值；跨 Flow 传递时只暴露
+            # 可校验的引用，由 Java Dispatcher 在执行前解析，避免复制敏感值。
+            return f"flow-slot://{flow.instanceId}/customerReference"
     return None
 
 

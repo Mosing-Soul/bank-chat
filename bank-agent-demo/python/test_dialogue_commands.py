@@ -65,13 +65,26 @@ class DialogueCommandInterpreterTest(unittest.TestCase):
 
     def test_pronoun_reuses_safe_customer_reference(self):
         source = self.flow("msg-1", "MESSAGE_SEND", "ACTIVE", "WAITING_CONFIRMATION")
-        source.slots["customerReference"] = "flow-slot://msg-1/customerReference"
+        source.slots["customerReference"] = "张伟"
 
         result = DialogueCommandInterpreter().interpret(self.request("先查一下他的AUM", [source]))
 
         self.assertEqual(DialogCommandType.START_FLOW, result.commands[-1].type)
         self.assertEqual("flow-slot://msg-1/customerReference",
                          result.commands[-1].slots["customerReference"])
+
+    def test_safe_reference_overrides_model_pronoun_fragment(self):
+        from ai_chat_models import DialogCommand
+        model = [DialogCommand(type=DialogCommandType.START_FLOW, targetSkill="CUSTOMER_AUM",
+                               slots={"customerReference": "一下他"}, confidence=0.9)]
+        fallback = [DialogCommand(type=DialogCommandType.START_FLOW, targetSkill="CUSTOMER_AUM",
+                                  slots={"customerReference": "flow-slot://msg-1/customerReference"},
+                                  confidence=0.9)]
+
+        merge_deterministic_slots(model, fallback)
+
+        self.assertEqual("flow-slot://msg-1/customerReference",
+                         model[0].slots["customerReference"])
 
     def test_message_request_extracts_customer_and_purpose(self):
         result = DialogueCommandInterpreter().interpret(self.request("给张伟生成产品到期提醒", []))

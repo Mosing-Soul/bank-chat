@@ -172,6 +172,25 @@ class DialogCommandDispatcherTest {
     }
 
     @Test
+    void rejectsNestedUnresolvedReferenceBeforeMutatingCurrentFlow() {
+        Fixture fixture = fixture();
+        DialogState state = fixture.dispatcher.dispatch("s1", null,
+                Collections.singletonList(start("MESSAGE_SEND"))).getDialogState();
+        FlowInstance message = fixture.engine.activeFlow(state);
+        fixture.engine.setSlot(state, message, "customerReference",
+                "flow-slot://" + message.getInstanceId() + "/customerReference");
+        DialogCommand startAum = start("CUSTOMER_AUM");
+        startAum.getSlots().put("customerReference",
+                "flow-slot://" + message.getInstanceId() + "/customerReference");
+
+        CommandDispatchResult result = fixture.dispatcher.dispatch("s1", state, Collections.singletonList(startAum));
+
+        assertThat(result.getOutcomes()).extracting("status").containsExactly("REJECTED");
+        assertThat(message.getStatus()).isEqualTo("ACTIVE");
+        assertThat(result.getDialogState().getFlowStack()).hasSize(1);
+    }
+
+    @Test
     void rejectsWholeCommandBatchWithoutPartialMutation() {
         Fixture fixture = fixture();
         DialogState state = fixture.dispatcher.dispatch("s1", null,

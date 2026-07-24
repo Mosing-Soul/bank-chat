@@ -1114,6 +1114,13 @@ button.greeting-line {
   font-weight: 600;
 }
 
+.thinking-detail {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .thinking-steps {
   display: flex;
   flex-wrap: wrap;

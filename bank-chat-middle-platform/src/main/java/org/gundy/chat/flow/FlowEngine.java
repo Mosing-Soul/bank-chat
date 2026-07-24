@@ -10,6 +10,7 @@ import org.gundy.chat.entity.dialog.DialogUiHints;
 import org.gundy.chat.entity.dialog.SkillDialogState;
 import org.gundy.chat.entity.flow.FlowInstance;
 import org.gundy.chat.service.SkillDefinitionRegistry;
+import org.gundy.chat.progress.DialogueProgress;
 import org.gundy.chat.statemachine.SkillTransitionResult;
 import org.springframework.stereotype.Service;
 
@@ -164,6 +165,7 @@ public class FlowEngine {
                 return terminal(nextState, instance, definition, null, null);
             }
             if ("COLLECT".equals(stage.getType())) {
+                DialogueProgress.report("FLOW_COLLECT", "正在核对办理信息", "检查当前业务所需信息是否完整");
                 List<String> missing = missingSlots(stage, instance);
                 if (!missing.isEmpty()) {
                     return askForSlot(nextState, instance, definition, missing.get(0), extracted == null || extracted.isEmpty());
@@ -172,6 +174,7 @@ public class FlowEngine {
                 continue;
             }
             if ("VALIDATE".equals(stage.getType())) {
+                DialogueProgress.report("FLOW_VALIDATE", "正在核验业务信息", "校验客户和业务参数");
                 FlowValidationResult validation = handler.validate(context);
                 if (!validation.isValid()) {
                     for (String slot : validation.getSlotsToClear()) instance.getSlots().remove(slot);
@@ -185,6 +188,7 @@ public class FlowEngine {
                 continue;
             }
             if ("EXECUTE".equals(stage.getType())) {
+                DialogueProgress.report("FLOW_EXECUTE", "正在调用业务服务", definition.getName());
                 FlowExecutionResult execution = handler.execute(context);
                 advance(definition, instance);
                 FlowStageDefinition nextStage = currentStage(definition, instance);
@@ -195,6 +199,7 @@ public class FlowEngine {
                 return result(nextState, execution.getAnswer(), false, execution.getData());
             }
             if ("CONFIRM".equals(stage.getType())) {
+                DialogueProgress.report("FLOW_CONFIRM", "正在准备确认信息", "执行前等待您的明确确认");
                 if (isConfirm(userMessage)) {
                     advance(definition, instance);
                     continue;

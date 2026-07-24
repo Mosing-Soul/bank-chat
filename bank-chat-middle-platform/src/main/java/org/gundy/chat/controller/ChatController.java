@@ -13,6 +13,7 @@ import org.gundy.chat.service.IntentClarificationService;
 import org.gundy.chat.service.IntentRouterService;
 import org.gundy.chat.service.MemoryService;
 import org.gundy.chat.service.SkillConfigService;
+import org.gundy.chat.progress.DialogueProgress;
 import org.gundy.chat.statemachine.SkillTransitionResult;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
@@ -75,6 +76,8 @@ public class ChatController {
 
             org.gundy.chat.entity.dialog.DialogState dialogState = dialogStateService.getState(sessionId);
             List<HistoryMessage> currentHistory = memoryService.getHistory(sessionId);
+            DialogueProgress.report("CONTEXT_READY", "已读取对话上下文", dialogState == null
+                    ? "开始新的办理事项" : "继续当前办理事项");
             SkillTransitionResult commandTransition = dialogueOrchestrationService.tryHandle(
                     traceId, sessionId, userMessage, dialogState, currentHistory,
                     request.getRequestedSkill(), request.forceSkill());
@@ -83,6 +86,8 @@ public class ChatController {
             }
             IntentRouteResult route = intentRouterService.route(dialogState, userMessage,
                     request.getRequestedSkill(), request.forceSkill());
+            DialogueProgress.report("ROUTE_READY", "已匹配服务能力", hasText(route.getRequestedSkill())
+                    ? "准备进入对应业务流程" : "准备生成回答");
             String effectiveRequestedSkill = hasText(route.getRequestedSkill()) ? route.getRequestedSkill() : request.getRequestedSkill();
             boolean effectiveForceSkill = request.forceSkill() || route.isForceSkill();
 
@@ -100,6 +105,7 @@ public class ChatController {
             List<HistoryMessage> history = clearStateBeforeAi
                     ? Collections.<HistoryMessage>emptyList()
                     : currentHistory;
+            DialogueProgress.report("RESPONSE_GENERATION", "正在整理查询结果", "生成清晰、可核验的答复");
             ChatResponse response = aiChatService.invoke(traceId, sessionId, userMessage, history,
                     effectiveRequestedSkill, effectiveForceSkill, route.getRequestedSkill(),
                     route.getConfidence(), route.entityMap(), route.getDialogAct(),

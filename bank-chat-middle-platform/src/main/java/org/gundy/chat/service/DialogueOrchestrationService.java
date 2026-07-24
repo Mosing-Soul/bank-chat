@@ -14,6 +14,7 @@ import org.gundy.chat.statemachine.SkillTransitionResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
+import org.gundy.chat.progress.DialogueProgress;
 
 import java.util.List;
 
@@ -47,6 +48,7 @@ public class DialogueOrchestrationService {
         DialogueCommandResponse interpretation;
         long interpretationStart = System.currentTimeMillis();
         try {
+            DialogueProgress.report("COMMAND_UNDERSTANDING", "正在理解对话动作", "结合当前事项和最近对话判断下一步");
             interpretation = commandService.interpret(traceId, sessionId, userMessage, state, history);
         } catch (RestClientException ex) {
             metrics.fallback(traceId, "COMMAND_SERVICE_UNAVAILABLE");
@@ -60,6 +62,7 @@ public class DialogueOrchestrationService {
         }
 
         CommandDispatchResult dispatched = dispatcher.dispatch(sessionId, state, interpretation.getCommands());
+        DialogueProgress.report("POLICY_VALIDATED", "已完成流程安全校验", "正在推进可执行的办理步骤");
         metrics.dispatch(traceId, dispatched);
         if (dispatched.isClarificationRequired()) {
             return message(dispatched.getDialogState(), friendlyClarification(dispatched.getClarificationPrompt()), false);

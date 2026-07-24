@@ -64,6 +64,12 @@ export interface ChatResponse {
   } | null;
 }
 
+export interface ChatProgressEvent {
+  code: string;
+  title: string;
+  detail?: string;
+}
+
 export interface SkillExampleConfig {
   exampleId: string;
   skillCode: string;

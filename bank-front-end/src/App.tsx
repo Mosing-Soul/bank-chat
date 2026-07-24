@@ -24,7 +24,7 @@ import {
 } from '@ant-design/icons';
 import { App as AntApp, Button, Input, Slider, Switch, Tooltip } from 'antd';
 import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
-import type { ChatMessage, SkillConfig, SkillExampleConfig } from './types/chat';
+import type { ChatMessage, ChatProgressEvent, SkillConfig, SkillExampleConfig } from './types/chat';
 import {
   createMessageId,
   getOrCreateSessionId,
@@ -139,13 +139,6 @@ const greetingFromExample = (example: SkillExampleConfig, skillName?: string): G
   requestedSkill: example.skillCode,
 });
 
-const thinkingStages = [
-  '识别问题意图',
-  '选择可用技能',
-  '调用业务接口或检索知识',
-  '整理结果并生成回答',
-];
-
 function App() {
   const { message } = AntApp.useApp();
   const [sessionId, setSessionId] = useState(() => getOrCreateSessionId());
@@ -165,14 +158,13 @@ function App() {
   const [greetingIndex, setGreetingIndex] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [stageIndex, setStageIndex] = useState(0);
+  const [progressSteps, setProgressSteps] = useState<ChatProgressEvent[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const messageScrollRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamTimerRef = useRef<number | null>(null);
-  const stageTimerRef = useRef<number | null>(null);
   const elapsedTimerRef = useRef<number | null>(null);
   const stopRequestedRef = useRef(false);
 
@@ -248,16 +240,12 @@ function App() {
     } else {
       endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
-  }, [messages, isSending, isStreaming, stageIndex]);
+  }, [messages, isSending, isStreaming, progressSteps]);
 
   const clearAsyncTimers = () => {
     if (streamTimerRef.current) {
       window.clearInterval(streamTimerRef.current);
       streamTimerRef.current = null;
-    }
-    if (stageTimerRef.current) {
-      window.clearInterval(stageTimerRef.current);
-      stageTimerRef.current = null;
     }
     if (elapsedTimerRef.current) {
       window.clearInterval(elapsedTimerRef.current);
@@ -295,21 +283,14 @@ function App() {
   };
 
   const startThinking = () => {
-    setStageIndex(0);
+    setProgressSteps([]);
     setElapsedSeconds(0);
-    stageTimerRef.current = window.setInterval(() => {
-      setStageIndex((current) => Math.min(current + 1, thinkingStages.length - 1));
-    }, 1400);
     elapsedTimerRef.current = window.setInterval(() => {
       setElapsedSeconds((current) => current + 1);
     }, 1000);
   };
 
   const stopThinking = () => {
-    if (stageTimerRef.current) {
-      window.clearInterval(stageTimerRef.current);
-      stageTimerRef.current = null;
-    }
     if (elapsedTimerRef.current) {
       window.clearInterval(elapsedTimerRef.current);
       elapsedTimerRef.current = null;
@@ -378,6 +359,14 @@ function App() {
           forceSkill: forceSkill || Boolean(skillToRequest),
         },
         requestController.signal,
+        (progress) => {
+          setProgressSteps((current) => {
+            if (current[current.length - 1]?.code === progress.code) {
+              return current;
+            }
+            return [...current, progress].slice(-5);
+          });
+        },
       );
 
       stopThinking();
@@ -538,7 +527,7 @@ function App() {
     setPendingRequestedSkill(null);
     setIsSending(false);
     setIsStreaming(false);
-    setStageIndex(0);
+    setProgressSteps([]);
     setElapsedSeconds(0);
     message.success('已清空当前会话');
     window.setTimeout(() => {
@@ -689,7 +678,7 @@ function App() {
                 />
               ))}
               {isSending && !isStreaming ? (
-                <ThinkingBubble stageIndex={stageIndex} elapsedSeconds={elapsedSeconds} />
+                <ThinkingBubble steps={progressSteps} elapsedSeconds={elapsedSeconds} />
               ) : null}
             </div>
           )}
@@ -1080,7 +1069,8 @@ function ConfirmationCard({
   );
 }
 
-function ThinkingBubble({ stageIndex, elapsedSeconds }: { stageIndex: number; elapsedSeconds: number }) {
+function ThinkingBubble({ steps, elapsedSeconds }: { steps: ChatProgressEvent[]; elapsedSeconds: number }) {
+  const current = steps[steps.length - 1];
   return (
     <article className="message-row message-row-assistant">
       <div className="assistant-avatar" aria-hidden="true">
@@ -1089,19 +1079,20 @@ function ThinkingBubble({ stageIndex, elapsedSeconds }: { stageIndex: number; el
       <div className="thinking-card">
         <div className="thinking-head">
           <LoadingOutlined />
-          <span>思考中</span>
+          <span>正在办理</span>
           <em>{elapsedSeconds}s</em>
         </div>
-        <div className="thinking-stage">{thinkingStages[stageIndex]}</div>
+        <div className="thinking-stage">{current?.title || '正在连接业务服务'}</div>
+        {current?.detail ? <div className="thinking-detail">{current.detail}</div> : null}
         <div className="thinking-steps">
-          {thinkingStages.map((stage, index) => (
+          {steps.map((step, index) => (
             <span
-              key={stage}
+              key={`${step.code}-${index}`}
               className={
-                index < stageIndex ? 'thinking-step thinking-step-done' : index === stageIndex ? 'thinking-step thinking-step-active' : 'thinking-step'
+                index < steps.length - 1 ? 'thinking-step thinking-step-done' : 'thinking-step thinking-step-active'
               }
             >
-              {stage}
+              {step.title}
             </span>
           ))}
         </div>

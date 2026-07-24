@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Slf4j
@@ -47,14 +49,14 @@ public class AiChatService {
         request.setTraceId(traceId);
         request.setSessionId(sessionId);
         request.setMessage(message);
-        request.setHistory(history);
+        request.setHistory(history == null ? Collections.<HistoryMessage>emptyList() : history);
         request.setRequestedSkill(requestedSkill);
         request.setForceSkill(forceSkill);
         request.setRouterIntent(routerIntent);
         request.setRouterConfidence(routerConfidence);
-        request.setEntities(entities);
+        request.setEntities(entities == null ? new LinkedHashMap<String, Object>() : entities);
         request.setDialogAct(dialogAct);
-        request.setSkillExamples(skillExamples);
+        request.setSkillExamples(skillExamples == null ? new LinkedHashMap<String, Object>() : skillExamples);
 
         HttpHeaders headers = new HttpHeaders();
         headers.add("X-Trace-Id", traceId);

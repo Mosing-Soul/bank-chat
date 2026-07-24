@@ -165,13 +165,13 @@ class AiChatTests(unittest.TestCase):
 
     def test_configured_examples_can_drive_intent(self):
         result = IntentRecognitionService(llm=None).recognize(
-            "提前赎回规则是什么",
+            "反洗钱法中，临时冻结的最长时限是48小时吗？",
             skill_examples={
                 "examples": [
                     {
                         "skillCode": "RAG_QUERY",
-                        "text": "提前赎回规则是什么",
-                        "displayText": "提前赎回规则",
+                        "text": "反洗钱法中，临时冻结的最长时限是48小时吗？",
+                        "displayText": "反洗钱临时冻结时限",
                         "confidence": 0.92,
                     }
                 ]

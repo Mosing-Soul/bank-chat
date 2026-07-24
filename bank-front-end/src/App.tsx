@@ -85,8 +85,8 @@ const defaultQuickQuestions: QuickQuestion[] = [
   },
   {
     icon: <ProductOutlined />,
-    label: '提前赎回规则',
-    value: '提前赎回规则',
+    label: '反洗钱临时冻结时限',
+    value: '反洗钱法中，临时冻结的最长时限是48小时吗？',
     requestedSkill: 'RAG_QUERY',
     forceWhenClicked: true,
   },
@@ -114,9 +114,9 @@ const defaultGreetings: GreetingConfig[] = [
     requestedSkill: 'MESSAGE_SEND',
   },
   {
-    text: '遇到赎回咨询时，可先确认产品规则和确认日。',
-    prompt: '提前赎回规则',
-    skill: '规则问答',
+    text: '遇到反洗钱业务疑问时，可查询法规中的临时冻结时限。',
+    prompt: '反洗钱法中，临时冻结的最长时限是48小时吗？',
+    skill: '法规问答',
     requestedSkill: 'RAG_QUERY',
   },
   {

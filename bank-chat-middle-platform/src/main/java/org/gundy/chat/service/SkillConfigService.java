@@ -266,12 +266,43 @@ public class SkillConfigService {
             persist(defaults);
             return defaults;
         }
+        if (migrateLegacyRedemptionExample(persisted)) {
+            persist(persisted);
+        }
         return persisted;
     }
 
     private List<SkillConfig> loadPersistedOrCurrent() {
         List<SkillConfig> persisted = loadPersisted();
+        if (persisted != null && migrateLegacyRedemptionExample(persisted)) {
+            persist(persisted);
+        }
         return persisted == null || persisted.isEmpty() ? skills : persisted;
+    }
+
+    private boolean migrateLegacyRedemptionExample(List<SkillConfig> values) {
+        boolean changed = false;
+        for (SkillConfig skill : values) {
+            if ("RAG_QUERY".equals(skill.getSkillCode())
+                    && skill.getDescription() != null
+                    && skill.getDescription().contains("提前赎回规则")) {
+                skill.setDescription("查询行内制度、客户等级规则、反洗钱法规、监管材料等知识。");
+                changed = true;
+            }
+            if (skill.getExamples() == null) {
+                continue;
+            }
+            for (SkillExampleConfig example : skill.getExamples()) {
+                if ("ex-rag-1".equals(example.getExampleId())
+                        && ("提前赎回规则是什么".equals(example.getText())
+                        || "提前赎回规则".equals(example.getText()))) {
+                    example.setText("反洗钱法中，临时冻结的最长时限是48小时吗？");
+                    example.setDisplayText("反洗钱临时冻结时限");
+                    changed = true;
+                }
+            }
+        }
+        return changed;
     }
 
     private List<SkillConfig> loadPersisted() {
@@ -365,9 +396,11 @@ public class SkillConfigService {
         message.getExamples().add(example("ex-msg-3", "MESSAGE_SEND", "给客户发消息", "生成客户消息", "clock", 0.84D, false, false, false, true, 32));
 
         SkillConfig rag = new SkillConfig("RAG_QUERY", "行内知识问答",
-                "查询行内制度、产品规则、客户等级规则、提前赎回规则、监管材料等知识。", true, true, true, 75,
+                "查询行内制度、客户等级规则、反洗钱法规、监管材料等知识。", true, true, true, 75,
                 "查询行内规则、制度、产品说明或文档内容。");
-        rag.getExamples().add(example("ex-rag-1", "RAG_QUERY", "提前赎回规则是什么", "提前赎回规则", "product", 0.92D, true, true, false, true, 40));
+        rag.getExamples().add(example("ex-rag-1", "RAG_QUERY",
+                "反洗钱法中，临时冻结的最长时限是48小时吗？", "反洗钱临时冻结时限",
+                "product", 0.92D, true, true, false, true, 40));
         rag.getExamples().add(example("ex-rag-2", "RAG_QUERY", "招行的客户等级是怎么样的", "查询客户等级规则", "product", 0.91D, true, false, true, true, 41));
         rag.getExamples().add(example("ex-rag-3", "RAG_QUERY", "客户等级规则是什么", "客户等级规则", "product", 0.88D, false, false, false, true, 42));
         rag.getExamples().add(example("ex-rag-4", "RAG_QUERY", "客户等级是怎么划分的", "客户等级划分", "product", 0.86D, false, false, false, true, 43));

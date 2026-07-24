@@ -24,18 +24,18 @@ class ReadOnlyFlowHandlerTest {
     void ragFlowKeepsQuestionAndReturnsSources() {
         RagService service = mock(RagService.class);
         RagResponse response = new RagResponse();
-        response.setAnswer("赎回规则说明");
+        response.setAnswer("临时冻结最长不超过48小时。");
         response.setSources(Arrays.asList("rule.pdf"));
-        when(service.query(eq("提前赎回规则是什么"), eq("s1"), anyList())).thenReturn(response);
+        when(service.query(eq("反洗钱法中，临时冻结的最长时限是48小时吗？"), eq("s1"), anyList())).thenReturn(response);
         RagQueryFlowHandler handler = new RagQueryFlowHandler(service);
         FlowContext context = context("trace-1", "s1", "RAG_QUERY");
 
-        Map<String, Object> slots = handler.extractSlots(context, "提前赎回规则是什么");
+        Map<String, Object> slots = handler.extractSlots(context, "反洗钱法中，临时冻结的最长时限是48小时吗？");
         context.getFlowInstance().getSlots().putAll(slots);
         FlowExecutionResult result = handler.execute(context);
 
-        assertThat(slots).containsEntry("question", "提前赎回规则是什么");
-        assertThat(result.getAnswer()).isEqualTo("赎回规则说明");
+        assertThat(slots).containsEntry("question", "反洗钱法中，临时冻结的最长时限是48小时吗？");
+        assertThat(result.getAnswer()).isEqualTo("临时冻结最长不超过48小时。");
         assertThat(result.getData()).containsEntry("sources", Arrays.asList("rule.pdf"));
     }
 

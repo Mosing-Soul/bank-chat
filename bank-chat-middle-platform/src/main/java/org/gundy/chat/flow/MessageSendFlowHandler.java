@@ -134,7 +134,7 @@ public class MessageSendFlowHandler implements FlowSkillHandler {
     }
 
     private String extractCustomer(String text) {
-        Matcher matcher = Pattern.compile("(?:客户|给)([\\u4e00-\\u9fa5]{2,4}?)(?=发送|发|通知|提醒|消息|的|$|[，,。\\s])").matcher(text);
+        Matcher matcher = Pattern.compile("(?:客户|给)([\\u4e00-\\u9fa5]{2,4}?)(?=生成|发送|发|通知|提醒|消息|的|$|[，,。\\s])").matcher(text);
         if (matcher.find()) return matcher.group(1).trim();
         return text.matches("[\\u4e00-\\u9fa5]{2,4}") && inferPurpose(text) == null ? text : null;
     }

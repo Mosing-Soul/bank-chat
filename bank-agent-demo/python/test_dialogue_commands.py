@@ -6,7 +6,7 @@ from ai_chat_models import (
     DialogueFlowSnapshot,
     DialogueSkillSnapshot,
 )
-from dialogue.command_interpreter import DialogueCommandInterpreter
+from dialogue.command_interpreter import DialogueCommandInterpreter, merge_deterministic_slots
 
 
 class DialogueCommandInterpreterTest(unittest.TestCase):
@@ -72,6 +72,27 @@ class DialogueCommandInterpreterTest(unittest.TestCase):
         self.assertEqual(DialogCommandType.START_FLOW, result.commands[-1].type)
         self.assertEqual("flow-slot://msg-1/customerReference",
                          result.commands[-1].slots["customerReference"])
+
+    def test_message_request_extracts_customer_and_purpose(self):
+        result = DialogueCommandInterpreter().interpret(self.request("给张伟生成产品到期提醒", []))
+
+        self.assertEqual(DialogCommandType.START_FLOW, result.commands[0].type)
+        self.assertEqual("MESSAGE_SEND", result.commands[0].targetSkill)
+        self.assertEqual("张伟", result.commands[0].slots["customerReference"])
+        self.assertEqual("产品到期提醒", result.commands[0].slots["messagePurpose"])
+
+    def test_deterministic_slots_complete_incomplete_model_command(self):
+        from ai_chat_models import DialogCommand
+        model = [DialogCommand(type=DialogCommandType.START_FLOW, targetSkill="MESSAGE_SEND",
+                               slots={"messagePurpose": "产品到期提醒"}, confidence=0.9)]
+        fallback = [DialogCommand(type=DialogCommandType.START_FLOW, targetSkill="MESSAGE_SEND",
+                                  slots={"customerReference": "张伟", "messagePurpose": "产品到期提醒"},
+                                  confidence=0.9)]
+
+        merge_deterministic_slots(model, fallback)
+
+        self.assertEqual("张伟", model[0].slots["customerReference"])
+        self.assertEqual("产品到期提醒", model[0].slots["messagePurpose"])
 
     def request(self, message, flows):
         return DialogueCommandRequest(

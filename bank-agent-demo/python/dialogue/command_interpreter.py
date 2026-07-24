@@ -56,6 +56,7 @@ class DialogueCommandInterpreter:
                 result = DialogueCommandPlan(**result)
             if not result.commands and fallback:
                 return response(request, fallback, False, "empty model output; deterministic fallback")
+            merge_deterministic_slots(result.commands, fallback)
             return response(request, result.commands, True, result.reason)
         except Exception as exc:
             return response(request, fallback, False, f"model unavailable: {type(exc).__name__}")
@@ -82,6 +83,26 @@ def fallback_commands(request: DialogueCommandRequest) -> List[DialogCommand]:
     customer_name = extract_customer_name(text)
     if refers_to_prior_customer(text):
         customer_name = None
+
+    if is_message_send_request(text):
+        customer_reference = extract_message_customer_reference(text)
+        purpose = extract_message_purpose(text)
+        slot_values = {}
+        if customer_reference:
+            slot_values["customerReference"] = customer_reference
+        if purpose:
+            slot_values["messagePurpose"] = purpose
+        if active and active.skillId == "MESSAGE_SEND":
+            commands = []
+            for slot, value in slot_values.items():
+                commands.append(slot_command(active, slot, value))
+            return commands or [command(DialogCommandType.REQUEST_CLARIFICATION, active.skillId,
+                                        active.instanceId, 0.7, "message slots are missing")]
+        commands = switch_commands(active, "MESSAGE_SEND")
+        if commands and commands[-1].type == DialogCommandType.START_FLOW:
+            commands[-1].slots.update(slot_values)
+        return commands
+
     if is_customer_aum_query(text, _entity_with_customer(customer_name)):
         commands = switch_commands(active, "CUSTOMER_AUM")
         if customer_name:
@@ -168,6 +189,19 @@ def response(request, commands, model_used, reason):
                                    commands=commands, modelUsed=model_used, reason=reason)
 
 
+def merge_deterministic_slots(model_commands: List[DialogCommand], fallback_commands_: List[DialogCommand]):
+    """补齐高精度降级已识别但模型遗漏的槽位，不覆盖模型已有判断。"""
+    for fallback in fallback_commands_:
+        if fallback.type != DialogCommandType.START_FLOW or not fallback.slots:
+            continue
+        target = next((item for item in model_commands
+                       if item.type == DialogCommandType.START_FLOW
+                       and item.targetSkill == fallback.targetSkill), None)
+        if target:
+            for slot, value in fallback.slots.items():
+                target.slots.setdefault(slot, value)
+
+
 def _entity_with_customer(customer_name):
     from ai_chat_models import IntentEntities
     return IntentEntities(customerName=customer_name)
@@ -182,4 +216,37 @@ def prior_customer_reference(flows: List[DialogueFlowSnapshot]):
         value = flow.slots.get("customerReference")
         if isinstance(value, str) and value.startswith("flow-slot://"):
             return value
+    return None
+
+
+def is_message_send_request(text: str) -> bool:
+    return bool(re.search(r"(发消息|发送消息|生成(?:一条)?(?:客户)?消息|消息预览|"
+                          r"给.+(?:生成|发送|发|通知|提醒)|(?:到期|资产配置|调仓|再平衡)提醒)", text))
+
+
+def extract_message_customer_reference(text: str) -> Optional[str]:
+    customer_id = re.search(r"(?i)\b(?:CUST|C)[-_]?\d{3,}\b", text)
+    if customer_id:
+        return customer_id.group(0).upper().replace("-", "").replace("_", "")
+    patterns = [
+        r"(?:给|客户(?:姓名)?(?:是|为)?)[：: ]*([\u4e00-\u9fa5]{2,4}?)(?=生成|发送|发|通知|提醒|消息|的|[，,。\s]|$)",
+        r"生成(?:一条)?给([\u4e00-\u9fa5]{2,4})的",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1)
+    return None
+
+
+def extract_message_purpose(text: str) -> Optional[str]:
+    if "到期" in text:
+        return "产品到期提醒"
+    if "资产配置" in text or "再平衡" in text or "调仓" in text:
+        return "资产配置提醒"
+    custom = re.search(r"(?:内容是|发送内容是|消息内容是|自定义内容是)(.+)", text)
+    if custom:
+        return custom.group(1).strip()
+    if "提醒" in text or "通知" in text:
+        return "客户提醒"
     return None

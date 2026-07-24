@@ -1,5 +1,13 @@
 [
   {
+    "name": "message_first_turn_extracts_customer_and_purpose",
+    "initialFlowStack": [],
+    "turns": [
+      {"user": "给张伟生成产品到期提醒", "commands": ["START_FLOW"], "lastTargetSkill": "MESSAGE_SEND",
+       "lastSlots": {"customerReference": "张伟", "messagePurpose": "产品到期提醒"}}
+    ]
+  },
+  {
     "name": "message_interrupted_by_pronoun_aum_then_resume",
     "initialFlowStack": [
       {"instanceId": "msg-1", "skillId": "MESSAGE_SEND", "status": "ACTIVE", "currentStage": "WAITING_CONFIRMATION",

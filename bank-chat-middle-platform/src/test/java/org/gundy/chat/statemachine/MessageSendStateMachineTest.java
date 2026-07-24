@@ -48,7 +48,7 @@ class MessageSendStateMachineTest {
         when(messageSkillService.send(any(MessageSendRequest.class))).thenReturn(sent());
 
         SkillTransitionResult previewResult = stateMachine.handle("trace-1", "session-1", null,
-                "\u7ed9\u5f20\u4f1f\u53d1\u9001\u4ea7\u54c1\u5230\u671f\u63d0\u9192");
+                "给张伟生成产品到期提醒");
 
         assertThat(previewResult.isHandled()).isTrue();
         assertThat(previewResult.isRequiresConfirmation()).isTrue();

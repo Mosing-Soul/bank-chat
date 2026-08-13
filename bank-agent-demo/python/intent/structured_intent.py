@@ -13,9 +13,9 @@ KNOWLEDGE_QA, CUSTOMER_AUM_QUERY, EXTERNAL_API_QUERY, MESSAGE_SEND, GENERAL_CHAT
 区分规则：
 - KNOWLEDGE_QA：用户在问银行内部文档、制度材料、产品说明、业务规则、操作口径、术语定义、准入条件、监管法规、合规要求、客户分层标准等知识性问题，需要 RAG 回答。即使用户没有明确说“查文档”，只要是一个可从知识库材料中回答的业务问题，也归为 KNOWLEDGE_QA。
 - CUSTOMER_AUM_QUERY：查询某个具体客户的资产、AUM、持仓汇总等业务数据，需要客户姓名或编号。
-- EXTERNAL_API_QUERY：查询外部实时信息或通用模型可回答的问题，例如黄金价格、天气、汇率、股票、新闻等。
+- EXTERNAL_API_QUERY：查询外部实时信息，例如黄金价格、天气、汇率、股票、新闻等。
 - MESSAGE_SEND：要求给客户生成、预览或发送消息、提醒、通知。本阶段只做预览。
-- GENERAL_CHAT：问候、介绍助手能力等普通对话。
+- GENERAL_CHAT：问候、介绍助手能力、一般投资知识或风险说明等由兜底大模型直接回答的普通对话。
 - UNKNOWN：信息不足或无法判断，例如“帮我查一下”“这个呢”“查一下资料”。
 
 示例：
@@ -30,6 +30,7 @@ KNOWLEDGE_QA, CUSTOMER_AUM_QUERY, EXTERNAL_API_QUERY, MESSAGE_SEND, GENERAL_CHAT
 - “商业银行主要监管指标里资本充足率是多少？” -> KNOWLEDGE_QA
 - “查询客户张伟当前AUM” -> CUSTOMER_AUM_QUERY
 - “黄金价格是多少” -> EXTERNAL_API_QUERY
+- “黄金投资有什么风险” -> GENERAL_CHAT（走兜底大模型，不调用知识库或实时外部接口）
 - “给张伟生成产品到期提醒” -> MESSAGE_SEND
 - 当前正在发消息时，用户回复“产品到期提醒” -> MESSAGE_SEND（补充消息用途）
 
@@ -39,7 +40,8 @@ KNOWLEDGE_QA, CUSTOMER_AUM_QUERY, EXTERNAL_API_QUERY, MESSAGE_SEND, GENERAL_CHAT
 3. entities 只填能从用户话语明确抽取到的字段；禁止把“等级、资产、信息、分类、分层、余额、持仓、规则”等业务词当作客户姓名。
 4. reason 用一句简短分类依据，不要输出推理链。
 5. 如果辅助路由信息 routerIntent 置信度较高，优先参考它；除非用户原文和实体强烈矛盾。
-6. 参数缺失时填写 missingSlots；存在多种合理意图时选择 UNKNOWN，并填写 candidateIntents 和 ambiguities。
+6. 参数缺失时填写 missingSlots。只有信息不足、无法判断用户究竟要做什么时才选择 UNKNOWN。
+7. 一句话包含多个明确且可独立执行的意图时，不要返回 UNKNOWN，也不要同时执行多个技能；比较各意图置信度，只返回置信度最高的一个，并在 ambiguities 简短记录被忽略的次要意图。
 """
 
 try:
@@ -94,6 +96,9 @@ class IntentRecognitionService:
                 intent=IntentType.UNKNOWN,
                 confidence=result.confidence,
                 entities=result.entities,
+                missingSlots=result.missingSlots,
+                candidateIntents=result.candidateIntents,
+                ambiguities=result.ambiguities,
                 reason="confidence below threshold",
             )
         return result
@@ -110,7 +115,7 @@ class IntentRecognitionService:
 def fallback_intent(user_input: str, reason: str = "fallback rules", router_intent=None,
                     router_confidence=None, router_entities=None, dialog_act=None, skill_examples=None) -> IntentResult:
     text = user_input.strip()
-    entities = IntentEntities(customerName=extract_customer_name(text))
+    entities = IntentEntities(customerName=extract_customer_name(text), customerId=extract_customer_id(text))
     entities = merge_router_entities(entities, router_entities)
 
     router_result = router_prior(router_intent, router_confidence, entities, dialog_act)
@@ -120,30 +125,87 @@ def fallback_intent(user_input: str, reason: str = "fallback rules", router_inte
     if example_result is not None:
         return example_result
 
-    if is_customer_aum_query(text, entities):
+    ambiguity = ambiguous_business_query(text, entities)
+    if ambiguity is not None:
         return IntentResult(
-            intent=IntentType.CUSTOMER_AUM_QUERY,
-            confidence=0.72 if entities.customerName else 0.55,
+            intent=IntentType.UNKNOWN,
+            confidence=0.45,
             entities=entities,
-            missingSlots=[] if (entities.customerName or entities.customerId) else ["customerNameOrId"],
-            reason=reason,
+            candidateIntents=ambiguity,
+            ambiguities=["需要确认是查询业务规则还是具体客户数据"],
+            reason="ambiguous business query",
         )
+
+    if is_underspecified_query(text):
+        return IntentResult(
+            intent=IntentType.UNKNOWN,
+            confidence=0.35,
+            entities=entities,
+            ambiguities=["缺少要查询的主题或对象"],
+            reason="underspecified query",
+        )
+
+    candidates = []
+    if is_general_model_fallback_query(text):
+        candidates.append(IntentResult(
+            intent=IntentType.GENERAL_CHAT,
+            confidence=0.90,
+            entities=entities,
+            reason="general model fallback policy",
+        ))
     if is_message_send_request(text):
         entities.messagePurpose = extract_message_purpose(text)
         entities.templateCode = template_code_for_purpose(entities.messagePurpose)
-        return IntentResult(
+        candidates.append(IntentResult(
             intent=IntentType.MESSAGE_SEND,
-            confidence=0.76 if entities.customerName and entities.messagePurpose else 0.58,
+            confidence=0.92 if (entities.customerName or entities.customerId) and entities.messagePurpose else 0.82,
             entities=entities,
+            missingSlots=[] if (entities.customerName or entities.customerId) else ["customerNameOrId"],
             reason=reason,
-        )
+        ))
+    if is_customer_aum_query(text, entities):
+        candidates.append(IntentResult(
+            intent=IntentType.CUSTOMER_AUM_QUERY,
+            confidence=0.90 if (entities.customerName or entities.customerId) else 0.72,
+            entities=entities,
+            missingSlots=[] if (entities.customerName or entities.customerId) else ["customerNameOrId"],
+            reason=reason,
+        ))
     if is_external_api_query(text):
-        return IntentResult(intent=IntentType.EXTERNAL_API_QUERY, confidence=0.82, entities=entities, reason=reason)
+        candidates.append(IntentResult(intent=IntentType.EXTERNAL_API_QUERY, confidence=0.88, entities=entities, reason=reason))
     if is_knowledge_qa_candidate(text):
-        return IntentResult(intent=IntentType.KNOWLEDGE_QA, confidence=0.78, entities=entities, reason=reason)
+        candidates.append(IntentResult(intent=IntentType.KNOWLEDGE_QA, confidence=0.86, entities=entities, reason=reason))
     if re.search(r"(你好|您好|介绍|你是谁|你能做什么)", text):
-        return IntentResult(intent=IntentType.GENERAL_CHAT, confidence=0.78, entities=entities, reason=reason)
+        candidates.append(IntentResult(intent=IntentType.GENERAL_CHAT, confidence=0.82, entities=entities, reason=reason))
+    if candidates:
+        selected = max(candidates, key=lambda item: item.confidence)
+        competing = [item.intent for item in candidates if item.intent != selected.intent]
+        if competing:
+            selected.ambiguities = [
+                "compound request; selected highest-confidence intent and ignored: "
+                + ", ".join(intent.value for intent in competing)
+            ]
+        return selected
     return IntentResult(intent=IntentType.GENERAL_CHAT, confidence=0.5, entities=entities, reason="general chat fallback")
+
+
+def ambiguous_business_query(text: str, entities: IntentEntities):
+    if entities.customerName or entities.customerId:
+        return None
+    if re.fullmatch(r"(?:帮我)?(?:查|查询|看)(?:一下)?(?:客户)?(?:等级|信息|分类|分层|资产|持仓|余额)", text):
+        return [IntentType.KNOWLEDGE_QA, IntentType.CUSTOMER_AUM_QUERY]
+    return None
+
+
+def is_underspecified_query(text: str) -> bool:
+    patterns = (
+        r"^(?:帮我)?查(?:一下)?$",
+        r"^(?:帮我)?看(?:一下)?$",
+        r"^查(?:一下)?(?:资料|文档|知识库)$",
+        r"^(?:这个|那个|它|这个呢|那个呢)$",
+        r"^我想了解一下$",
+    )
+    return any(re.fullmatch(pattern, text) for pattern in patterns)
 
 
 def build_router_context(router_intent=None, router_confidence=None, entities=None, dialog_act=None, skill_examples=None) -> str:
@@ -402,10 +464,19 @@ def is_knowledge_qa_candidate(text: str) -> bool:
 
 
 def is_external_api_query(text: str) -> bool:
+    if re.search(r"(风险|规定|规则|制度|办法|要求|适合|建议|原理|知识)", text):
+        return False
     return bool(re.search(
         r"(黄金|金价|Au9999|AU9999|天气|气温|下雨|空气质量|汇率|美元|人民币|股票|股价|指数|行情|新闻|热搜|今天|现在|实时)",
         text,
         re.IGNORECASE,
+    ))
+
+
+def is_general_model_fallback_query(text: str) -> bool:
+    return bool(re.search(
+        r"(黄金|基金|股票|理财|投资).*(风险|适合|建议|原理|基础知识|怎么看)",
+        text,
     ))
 
 
@@ -419,7 +490,7 @@ def is_customer_aum_query(text: str, entities: IntentEntities) -> bool:
 
 
 def is_message_send_request(text: str) -> bool:
-    has_send_action = bool(re.search(r"(发送|发.{0,3}消息|生成|预览|起草|编辑|写.{0,3}消息)", text))
+    has_send_action = bool(re.search(r"(发送|发.{0,3}(?:消息|短信|微信|提醒|通知)|生成|预览|起草|编辑|写.{0,3}消息)", text))
     has_message_object = bool(re.search(r"(消息|短信|微信|话术|提醒|通知)", text))
     has_customer_anchor = bool(re.search(r"(给|客户|先生|女士|经理|用户)", text))
     return has_send_action and has_message_object and has_customer_anchor
@@ -437,9 +508,15 @@ def extract_customer_name(text: str):
         if not match:
             continue
         name = match.group(1)
-        if name not in reserved and not any(name.endswith(word) for word in reserved):
+        contains_action = bool(re.search(r"(编辑|生成|发送|起草|查询|查一下|预览)", name))
+        if not contains_action and name not in reserved and not any(name.endswith(word) for word in reserved):
             return name
     return None
+
+
+def extract_customer_id(text: str):
+    match = re.search(r"(?<![A-Za-z0-9])(CUST\d+)(?![A-Za-z0-9])", text, re.IGNORECASE)
+    return match.group(1).upper() if match else None
 
 
 def extract_message_purpose(text: str):

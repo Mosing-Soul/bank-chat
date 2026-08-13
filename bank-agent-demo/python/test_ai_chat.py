@@ -91,8 +91,8 @@ class AiChatTests(unittest.TestCase):
             ("今天上海天气怎么样", IntentType.EXTERNAL_API_QUERY),
             ("给张伟发送产品到期提醒", IntentType.MESSAGE_SEND),
             ("你好，介绍一下你自己", IntentType.GENERAL_CHAT),
-            ("帮我查一下", IntentType.GENERAL_CHAT),
-            ("查一下资料", IntentType.GENERAL_CHAT),
+            ("帮我查一下", IntentType.UNKNOWN),
+            ("查一下资料", IntentType.UNKNOWN),
         ]
         for text, expected in cases:
             with self.subTest(text=text):
@@ -102,7 +102,11 @@ class AiChatTests(unittest.TestCase):
         result = fallback_intent("帮我查一下客户等级")
 
         self.assertIsNone(result.entities.customerName)
-        self.assertNotEqual(result.intent, IntentType.CUSTOMER_AUM_QUERY)
+        self.assertEqual(result.intent, IntentType.UNKNOWN)
+        self.assertEqual(
+            result.candidateIntents,
+            [IntentType.KNOWLEDGE_QA, IntentType.CUSTOMER_AUM_QUERY],
+        )
 
     def test_semantic_entity_extraction_extracts_explicit_customer_name(self):
         result = fallback_intent("查询客户张伟当前AUM")
@@ -111,9 +115,49 @@ class AiChatTests(unittest.TestCase):
         self.assertEqual(result.entities.customerName, "张伟")
         self.assertEqual(result.missingSlots, [])
 
+    def test_customer_id_counts_as_complete_aum_entity(self):
+        result = fallback_intent("客户CUST001当前持仓多少")
+
+        self.assertEqual(result.intent, IntentType.CUSTOMER_AUM_QUERY)
+        self.assertEqual(result.entities.customerId, "CUST001")
+        self.assertEqual(result.missingSlots, [])
+
+    def test_message_action_takes_priority_over_asset_word(self):
+        result = fallback_intent("给客户编辑一条资产配置消息")
+
+        self.assertEqual(result.intent, IntentType.MESSAGE_SEND)
+        self.assertEqual(result.missingSlots, ["customerNameOrId"])
+
+    def test_gold_risk_question_uses_general_model_fallback(self):
+        result = fallback_intent("黄金投资有什么风险")
+
+        self.assertEqual(result.intent, IntentType.GENERAL_CHAT)
+
+    def test_compound_query_selects_highest_confidence_intent_without_clarification(self):
+        result = fallback_intent("客户等级怎么划分，现在黄金价格又是多少")
+
+        self.assertEqual(result.intent, IntentType.EXTERNAL_API_QUERY)
+        self.assertGreaterEqual(result.confidence, 0.88)
+        self.assertTrue(any("compound request" in item for item in result.ambiguities))
+
+    def test_compound_aum_and_message_selects_message_preview_intent(self):
+        result = fallback_intent("查询张伟的AUM并给他生成产品到期提醒")
+
+        self.assertEqual(result.intent, IntentType.MESSAGE_SEND)
+        self.assertGreater(result.confidence, 0.90)
+
     def test_low_confidence_becomes_unknown(self):
         result = IntentRecognitionService(llm=None, threshold=0.9).recognize("黄金现在多少钱")
         self.assertEqual(result.intent, IntentType.UNKNOWN)
+
+    def test_low_confidence_unknown_keeps_clarification_candidates(self):
+        result = IntentRecognitionService(llm=None, threshold=0.6).recognize("帮我查一下客户等级")
+
+        self.assertEqual(result.intent, IntentType.UNKNOWN)
+        self.assertEqual(
+            result.candidateIntents,
+            [IntentType.KNOWLEDGE_QA, IntentType.CUSTOMER_AUM_QUERY],
+        )
 
     def test_structured_output_failure_falls_back(self):
         class BrokenLlm:

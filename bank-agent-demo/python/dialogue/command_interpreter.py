@@ -21,7 +21,7 @@ CONFIRM、REJECT、REQUEST_CLARIFICATION、NO_OP。
 
 要求：
 1. 必须结合当前 Flow Stack、阶段、已填槽位和候选技能理解用户输入。
-2. 一句话包含多个动作时按执行顺序返回多个命令。
+2. 一句话包含多个独立业务意图时，比较置信度，只选择置信度最高的一个业务意图；不得因为复合意图返回 REQUEST_CLARIFICATION，也不得同时 START_FLOW 多个技能。
 3. 用户切换业务时，必要时先 SUSPEND_FLOW，再 START_FLOW。
 4. 用户只是在回答当前待填参数时返回 SET_SLOT，不要重新 START_FLOW。
 5. 不能明确区分修改当前任务和切换任务时返回 REQUEST_CLARIFICATION。
@@ -56,6 +56,7 @@ class DialogueCommandInterpreter:
                 result = DialogueCommandPlan(**result)
             if not result.commands and fallback:
                 return response(request, fallback, False, "empty model output; deterministic fallback")
+            result.commands = keep_highest_confidence_flow(result.commands, request)
             merge_deterministic_slots(result.commands, fallback)
             return response(request, result.commands, True, result.reason)
         except Exception as exc:
@@ -205,6 +206,27 @@ def merge_deterministic_slots(model_commands: List[DialogCommand], fallback_comm
                     target.slots[slot] = value
                 else:
                     target.slots.setdefault(slot, value)
+
+
+def keep_highest_confidence_flow(commands: List[DialogCommand], request: DialogueCommandRequest) -> List[DialogCommand]:
+    """复合请求只保留最高置信度的业务 Flow；允许为该 Flow 保留一次挂起当前任务的命令。"""
+    starts = [item for item in commands if item.type == DialogCommandType.START_FLOW]
+    target_skills = {item.targetSkill for item in starts if item.targetSkill}
+    if len(target_skills) <= 1:
+        return commands
+    winner = max(starts, key=lambda item: item.confidence)
+    active = active_flow(request.flowStack)
+    filtered = []
+    for item in commands:
+        if item.type == DialogCommandType.START_FLOW:
+            if item is winner:
+                filtered.append(item)
+        elif item.targetSkill == winner.targetSkill:
+            filtered.append(item)
+        elif item.type == DialogCommandType.SUSPEND_FLOW and active and item.targetFlowInstanceId == active.instanceId:
+            if not any(existing.type == DialogCommandType.SUSPEND_FLOW for existing in filtered):
+                filtered.append(item)
+    return filtered
 
 
 def _entity_with_customer(customer_name):

@@ -46,4 +46,13 @@ class IntentRouterServiceTest {
         assertThat(result.getRequestedSkill()).isEqualTo("GOLD_PRICE");
         assertThat(result.isForceSkill()).isTrue();
     }
+
+    @Test
+    void delegatesCompoundRequestToModelTopOneSelection() {
+        IntentRouteResult result = router.route(null, "客户等级怎么划分，现在黄金价格又是多少", null, false);
+
+        assertThat(result.getRequestedSkill()).isNull();
+        assertThat(result.getDialogAct()).isEqualTo("MODEL_SELECT_HIGHEST_CONFIDENCE");
+        assertThat(result.getConfidence()).isZero();
+    }
 }

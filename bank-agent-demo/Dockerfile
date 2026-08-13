@@ -10,11 +10,13 @@ RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debia
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 使用阿里云 PyPI 镜像加速 pip 安装
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 
 COPY . .
 

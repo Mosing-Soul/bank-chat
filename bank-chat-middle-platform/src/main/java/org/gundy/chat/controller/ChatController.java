@@ -3,18 +3,7 @@ package org.gundy.chat.controller;
 import lombok.extern.slf4j.Slf4j;
 import org.gundy.chat.entity.ChatRequest;
 import org.gundy.chat.entity.ChatResponse;
-import org.gundy.chat.entity.HistoryMessage;
-import org.gundy.chat.entity.intent.IntentRouteResult;
-import org.gundy.chat.service.AiChatService;
-import org.gundy.chat.service.DialogStateMachineService;
-import org.gundy.chat.service.DialogStateService;
-import org.gundy.chat.service.DialogueOrchestrationService;
-import org.gundy.chat.service.IntentClarificationService;
-import org.gundy.chat.service.IntentRouterService;
-import org.gundy.chat.service.MemoryService;
-import org.gundy.chat.service.SkillConfigService;
-import org.gundy.chat.progress.DialogueProgress;
-import org.gundy.chat.statemachine.SkillTransitionResult;
+import org.gundy.chat.service.ChatApplicationService;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,166 +14,52 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/chat")
 public class ChatController {
-    private final MemoryService memoryService;
-    private final AiChatService aiChatService;
-    private final DialogStateService dialogStateService;
-    private final DialogStateMachineService dialogStateMachineService;
-    private final DialogueOrchestrationService dialogueOrchestrationService;
-    private final IntentClarificationService intentClarificationService;
-    private final IntentRouterService intentRouterService;
-    private final SkillConfigService skillConfigService;
+    private final ChatApplicationService chatApplicationService;
 
-    public ChatController(MemoryService memoryService,
-                          AiChatService aiChatService,
-                          DialogStateService dialogStateService,
-                          DialogStateMachineService dialogStateMachineService,
-                          DialogueOrchestrationService dialogueOrchestrationService,
-                          IntentClarificationService intentClarificationService,
-                          IntentRouterService intentRouterService,
-                          SkillConfigService skillConfigService) {
-        this.memoryService = memoryService;
-        this.aiChatService = aiChatService;
-        this.dialogStateService = dialogStateService;
-        this.dialogStateMachineService = dialogStateMachineService;
-        this.dialogueOrchestrationService = dialogueOrchestrationService;
-        this.intentClarificationService = intentClarificationService;
-        this.intentRouterService = intentRouterService;
-        this.skillConfigService = skillConfigService;
+    public ChatController(ChatApplicationService chatApplicationService) {
+        this.chatApplicationService = chatApplicationService;
     }
 
     @PostMapping
     public ResponseEntity<ChatResponse> chat(@RequestBody ChatRequest request,
                                              @RequestHeader(value = "X-Trace-Id", required = false) String requestTraceId) {
         String traceId = hasText(requestTraceId) ? requestTraceId : UUID.randomUUID().toString();
+        String sessionId = safeSessionId(request);
         MDC.put("traceId", traceId);
         long start = System.currentTimeMillis();
         try {
-            String sessionId = hasText(request.getSessionId()) ? request.getSessionId() : UUID.randomUUID().toString();
             String userMessage = request.effectiveMessage();
             if (!hasText(userMessage)) {
                 return ResponseEntity.badRequest().body(ChatResponse.friendlyError(
                         traceId, sessionId, "请输入要咨询或办理的内容。"));
             }
-
-            org.gundy.chat.entity.dialog.DialogState dialogState = dialogStateService.getState(sessionId);
-            List<HistoryMessage> currentHistory = memoryService.getHistory(sessionId);
-            DialogueProgress.report("CONTEXT_READY", "已读取对话上下文", dialogState == null
-                    ? "开始新的办理事项" : "继续当前办理事项");
-            SkillTransitionResult commandTransition = dialogueOrchestrationService.tryHandle(
-                    traceId, sessionId, userMessage, dialogState, currentHistory,
-                    request.getRequestedSkill(), request.forceSkill());
-            if (commandTransition != null && commandTransition.isHandled()) {
-                return transitionResponse(traceId, sessionId, userMessage, commandTransition, start, "COMMAND_FLOW");
-            }
-            IntentRouteResult route = intentRouterService.route(dialogState, userMessage,
-                    request.getRequestedSkill(), request.forceSkill());
-            DialogueProgress.report("ROUTE_READY", "已匹配服务能力", hasText(route.getRequestedSkill())
-                    ? "准备进入对应业务流程" : "准备生成回答");
-            String effectiveRequestedSkill = hasText(route.getRequestedSkill()) ? route.getRequestedSkill() : request.getRequestedSkill();
-            boolean effectiveForceSkill = request.forceSkill() || route.isForceSkill();
-
-            SkillTransitionResult transition = dialogStateMachineService.handle(
-                    traceId, sessionId, dialogState, userMessage,
-                    effectiveRequestedSkill, effectiveForceSkill);
-            if (transition != null && transition.isHandled()) {
-                return transitionResponse(traceId, sessionId, userMessage, transition, start, "STATE_MACHINE");
-            }
-            boolean clearStateBeforeAi = (transition != null && transition.isClearState()) || route.isClearHistory();
-            if (clearStateBeforeAi) {
-                dialogStateService.clearState(sessionId);
-            }
-
-            List<HistoryMessage> history = clearStateBeforeAi
-                    ? Collections.<HistoryMessage>emptyList()
-                    : currentHistory;
-            DialogueProgress.report("RESPONSE_GENERATION", "正在整理查询结果", "生成清晰、可核验的答复");
-            ChatResponse response = aiChatService.invoke(traceId, sessionId, userMessage, history,
-                    effectiveRequestedSkill, effectiveForceSkill, route.getRequestedSkill(),
-                    route.getConfidence(), route.entityMap(), route.getDialogAct(),
-                    skillConfigService.examplesPayload());
-            if (response == null) {
-                response = ChatResponse.friendlyError(traceId, sessionId, "AI 服务暂时不可用，请稍后再试。");
-            }
-            response.setTraceId(hasText(response.getTraceId()) ? response.getTraceId() : traceId);
-            response.setSessionId(hasText(response.getSessionId()) ? response.getSessionId() : sessionId);
-
-            ChatResponse clarification = intentClarificationService.maybeClarify(
-                    traceId, sessionId, userMessage, route, effectiveForceSkill, response);
-            if (clarification != null) {
-                log.info("sessionId={}, intent={}, status={}, durationMs={}",
-                        sessionId, clarification.getIntent(), "CLARIFICATION",
-                        System.currentTimeMillis() - start);
-                return ResponseEntity.ok(clarification);
-            }
-
-            if (hasText(response.getAnswer()) && response.getError() == null) {
-                memoryService.addConversation(sessionId, userMessage, response.getAnswer());
-            }
-            log.info("sessionId={}, intent={}, status={}, durationMs={}",
-                    sessionId, response.getIntent(), response.getError() == null ? "SUCCESS" : "ERROR",
-                    System.currentTimeMillis() - start);
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(chatApplicationService.handle(
+                    traceId, sessionId, userMessage, request));
         } catch (ResourceAccessException ex) {
             log.warn("python chat timeout or unavailable, durationMs={}", System.currentTimeMillis() - start);
-            return ResponseEntity.ok(ChatResponse.friendlyError(traceId, safeSessionId(request), "AI 服务响应超时或不可用，请稍后再试。"));
+            return ResponseEntity.ok(ChatResponse.friendlyError(
+                    traceId, sessionId, "AI 服务响应超时或不可用，请稍后再试。"));
         } catch (RestClientException ex) {
             log.warn("python chat call failed, durationMs={}", System.currentTimeMillis() - start);
-            return ResponseEntity.ok(ChatResponse.friendlyError(traceId, safeSessionId(request), "AI 服务调用失败，请稍后再试。"));
+            return ResponseEntity.ok(ChatResponse.friendlyError(
+                    traceId, sessionId, "AI 服务调用失败，请稍后再试。"));
         } finally {
             MDC.remove("traceId");
         }
     }
 
     private String safeSessionId(ChatRequest request) {
-        return request != null && hasText(request.getSessionId()) ? request.getSessionId() : UUID.randomUUID().toString();
-    }
-
-    private ResponseEntity<ChatResponse> transitionResponse(String traceId, String sessionId, String userMessage,
-                                                            SkillTransitionResult transition, long start,
-                                                            String status) {
-        ChatResponse response = new ChatResponse();
-        response.setTraceId(traceId);
-        response.setSessionId(sessionId);
-        response.setIntent(transitionIntent(transition));
-        response.setConfidence(0.95D);
-        response.setAnswer(transition.getAnswer());
-        response.setData(transition.getData());
-        response.setRequiresConfirmation(transition.isRequiresConfirmation());
-        response.setConfirmation(transition.getConfirmation());
-        response.setDialogState(transition.getDialogState());
-        if (transition.isTerminal() && !hasRetainedFlow(transition.getDialogState())) dialogStateService.clearState(sessionId);
-        else dialogStateService.saveState(sessionId, transition.getDialogState());
-        if (hasText(response.getAnswer())) memoryService.addConversation(sessionId, userMessage, response.getAnswer());
-        log.info("sessionId={}, intent={}, status={}, durationMs={}", sessionId, response.getIntent(), status,
-                System.currentTimeMillis() - start);
-        return ResponseEntity.ok(response);
+        return request != null && hasText(request.getSessionId())
+                ? request.getSessionId() : UUID.randomUUID().toString();
     }
 
     private boolean hasText(String value) {
         return value != null && value.trim().length() > 0;
-    }
-
-    private boolean hasRetainedFlow(org.gundy.chat.entity.dialog.DialogState state) {
-        if (state == null || state.getFlowStack() == null) return false;
-        for (org.gundy.chat.entity.flow.FlowInstance flow : state.getFlowStack()) {
-            if ("SUSPENDED".equals(flow.getStatus()) || "ACTIVE".equals(flow.getStatus())) return true;
-        }
-        return false;
-    }
-
-    private String transitionIntent(SkillTransitionResult transition) {
-        if (transition.getDialogState() != null && transition.getDialogState().getIntent() != null
-                && hasText(transition.getDialogState().getIntent().getCurrent())) {
-            return transition.getDialogState().getIntent().getCurrent();
-        }
-        return "STATE_MACHINE";
     }
 }

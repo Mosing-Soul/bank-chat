@@ -56,6 +56,21 @@ class IntentClarificationServiceTest {
         assertThat(clarification).isNull();
     }
 
+    @Test
+    void doesNotClarifyCompoundRequestAfterModelSelectedHighConfidenceTopOne() {
+        IntentRouteResult route = noRoute();
+        route.setDialogAct("MODEL_SELECT_HIGHEST_CONFIDENCE");
+        ChatResponse aiResponse = new ChatResponse();
+        aiResponse.setIntent("EXTERNAL_API_QUERY");
+        aiResponse.setConfidence(0.86D);
+        aiResponse.setAnswer("mock answer");
+
+        ChatResponse clarification = service.maybeClarify(
+                "trace-1", "s1", "客户等级怎么划分，现在黄金价格又是多少", route, false, aiResponse);
+
+        assertThat(clarification).isNull();
+    }
+
     private IntentRouteResult noRoute() {
         IntentRouteResult result = new IntentRouteResult();
         result.setConfidence(0.0D);

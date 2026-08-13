@@ -2,8 +2,6 @@ import os
 import re
 import pandas as pd
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -22,15 +20,18 @@ VECTOR_DB_DIR = str(env_path("BUILD_VECTOR_DB_DIR"))
 CHUNK_SIZE = env_int("DOCUMENT_CHUNK_SIZE")
 CHUNK_OVERLAP = env_int("DOCUMENT_CHUNK_OVERLAP")
 
-# Embedding 模型（CPU 上运行）
-embedding_model = HuggingFaceEmbeddings(
-    model_name=require_env("EMBEDDING_MODEL_NAME"),
-    model_kwargs={
-        'device': require_env("EMBEDDING_DEVICE"),
-        'local_files_only': env_bool("EMBEDDING_LOCAL_FILES_ONLY"),
-    },
-    encode_kwargs={'normalize_embeddings': True}
-)
+def create_embedding_model():
+    """CLI default; the online service injects its lifecycle-managed model."""
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+
+    return HuggingFaceEmbeddings(
+        model_name=require_env("EMBEDDING_MODEL_NAME"),
+        model_kwargs={
+            "device": require_env("EMBEDDING_DEVICE"),
+            "local_files_only": env_bool("EMBEDDING_LOCAL_FILES_ONLY"),
+        },
+        encode_kwargs={"normalize_embeddings": True},
+    )
 
 # ---------- Excel 解析函数 ----------
 # 这一组 Excel 解析函数的目标不是还原一个 DataFrame，而是生成 RAG 更容易理解的
@@ -528,23 +529,34 @@ def load_document(file_path):
         raise ValueError(f"Unsupported file type: {ext}")
 
 # ---------- 构建向量库 ----------
-def build_vector_store():
+def build_vector_store(
+    documents_dir=None,
+    vector_db_dir=None,
+    embedding=None,
+    chunk_size=None,
+    chunk_overlap=None,
+):
+    """Build the canonical PDF/Excel/Markdown index and return the opened store."""
+    from langchain_community.vectorstores import Chroma
+
+    documents_dir = documents_dir or DOCUMENTS_DIR
+    vector_db_dir = vector_db_dir or VECTOR_DB_DIR
+    embedding = embedding or create_embedding_model()
+    chunk_size = CHUNK_SIZE if chunk_size is None else chunk_size
+    chunk_overlap = CHUNK_OVERLAP if chunk_overlap is None else chunk_overlap
     # 检查目录是否存在
-    if not os.path.exists(DOCUMENTS_DIR):
-        print(f"错误：目录 {DOCUMENTS_DIR} 不存在")
-        return
+    if not os.path.exists(documents_dir):
+        raise FileNotFoundError(f"文档目录不存在: {documents_dir}")
 
     # 列出支持的文件
     supported_exts = ('.pdf', '.xls', '.xlsx', '.md')
-    files = [f for f in os.listdir(DOCUMENTS_DIR) if f.lower().endswith(supported_exts)]
+    files = sorted(f for f in os.listdir(documents_dir) if f.lower().endswith(supported_exts))
     if not files:
-        print(f"警告：在 {DOCUMENTS_DIR} 中没有找到支持的文档文件")
-        print("支持的文件类型：", supported_exts)
-        return
+        raise ValueError(f"在 {documents_dir} 中没有找到支持的文档文件: {supported_exts}")
 
     all_docs = []
     for filename in files:
-        file_path = os.path.join(DOCUMENTS_DIR, filename)
+        file_path = os.path.join(documents_dir, filename)
         print(f"正在加载: {file_path}")
         docs = load_document(file_path)
         if not docs:
@@ -553,8 +565,8 @@ def build_vector_store():
         # 对 PDF/MD 切分，Excel 已经按行切分，不再切分
         if filename.endswith(('.pdf', '.md')):
             splitter = RecursiveCharacterTextSplitter(
-                chunk_size=CHUNK_SIZE,
-                chunk_overlap=CHUNK_OVERLAP,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
                 separators=["\n\n", "\n", "。", "！", "？", "；", "，", " ", ""]
             )
             docs = splitter.split_documents(docs)
@@ -562,22 +574,30 @@ def build_vector_store():
         print(f"  -> 生成了 {len(docs)} 个片段")
 
     if not all_docs:
-        print("错误：没有任何文档片段被生成，请检查文档内容或解析逻辑。")
-        return
+        raise ValueError("没有任何文档片段被生成，请检查文档内容或解析逻辑")
 
     print(f"总计片段数: {len(all_docs)}")
+    # 调用方应传入一个空的版本目录；旧索引不会在构建过程中被修改。
+    os.makedirs(vector_db_dir, exist_ok=True)
+    if os.listdir(vector_db_dir):
+        raise ValueError(f"向量索引目标目录必须为空: {vector_db_dir}")
     # 构建向量库
     vectordb = Chroma.from_documents(
         documents=all_docs,
-        embedding=embedding_model,
-        persist_directory=VECTOR_DB_DIR
+        embedding=embedding,
+        persist_directory=vector_db_dir
     )
     vectordb.persist()
-    print(f"向量库已保存至 {VECTOR_DB_DIR}")
+    print(f"向量库已保存至 {vector_db_dir}")
+    return vectordb
 
 if __name__ == "__main__":
     if not os.path.exists(DOCUMENTS_DIR):
         os.makedirs(DOCUMENTS_DIR)
         print(f"Please put your documents in {DOCUMENTS_DIR} and run again.")
     else:
-        build_vector_store()
+        from vector_store_manager import VectorStoreManager
+
+        manager = VectorStoreManager(VECTOR_DB_DIR, create_embedding_model())
+        result = manager.refresh(DOCUMENTS_DIR)
+        print(f"已激活向量索引版本: {result.index_id}")

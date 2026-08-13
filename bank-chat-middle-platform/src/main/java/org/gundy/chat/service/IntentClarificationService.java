@@ -41,8 +41,7 @@ public class IntentClarificationService {
         }
 
         boolean shouldClarify = isLowModelConfidence(aiResponse)
-                || isUnknownIntent(aiResponse)
-                || isBusinessLikeButNoRoute(userMessage, route);
+                || isUnknownIntent(aiResponse);
         if (!shouldClarify) {
             return null;
         }

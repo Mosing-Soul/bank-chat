@@ -1,6 +1,5 @@
 package org.gundy.chat.service;
 
-import lombok.extern.log4j.Log4j;
 import lombok.extern.slf4j.Slf4j;
 import org.gundy.chat.entity.AiChatRequest;
 import org.gundy.chat.entity.ChatResponse;

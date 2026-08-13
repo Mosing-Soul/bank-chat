@@ -30,6 +30,12 @@ public class IntentRouterService {
         }
 
         String text = safe(userMessage);
+        if (isCompoundIntentQuery(text, entities)) {
+            result.setConfidence(0.0D);
+            result.setReason("compound request delegated to model top-1 selection");
+            result.setDialogAct("MODEL_SELECT_HIGHEST_CONFIDENCE");
+            return result;
+        }
         if (isExplicitCustomerAumQuery(text)) {
             return routeTo(result, "CUSTOMER_AUM", 0.94D, "explicit customer asset query");
         }
@@ -94,6 +100,15 @@ public class IntentRouterService {
     private boolean isMessageSendQuery(String text, ExtractedEntities entities) {
         return entities.hasMessageAction()
                 && text.matches(".*(发消息|发送消息|发送|通知|提醒|触达|到期提醒|资产配置提醒|给.*提醒|给.*通知).*");
+    }
+
+    private boolean isCompoundIntentQuery(String text, ExtractedEntities entities) {
+        int matches = 0;
+        if (isExplicitCustomerAumQuery(text)) matches++;
+        if (isInstitutionKnowledgeQuery(text, entities)) matches++;
+        if (isGoldPriceQuery(text, entities)) matches++;
+        if (isMessageSendQuery(text, entities)) matches++;
+        return matches > 1;
     }
 
     private String normalizeSkill(String skillName) {

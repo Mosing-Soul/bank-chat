@@ -1,12 +1,17 @@
 import unittest
 
 from ai_chat_models import (
+    DialogCommand,
     DialogCommandType,
     DialogueCommandRequest,
     DialogueFlowSnapshot,
     DialogueSkillSnapshot,
 )
-from dialogue.command_interpreter import DialogueCommandInterpreter, merge_deterministic_slots
+from dialogue.command_interpreter import (
+    DialogueCommandInterpreter,
+    keep_highest_confidence_flow,
+    merge_deterministic_slots,
+)
 
 
 class DialogueCommandInterpreterTest(unittest.TestCase):
@@ -95,7 +100,6 @@ class DialogueCommandInterpreterTest(unittest.TestCase):
         self.assertEqual("产品到期提醒", result.commands[0].slots["messagePurpose"])
 
     def test_deterministic_slots_complete_incomplete_model_command(self):
-        from ai_chat_models import DialogCommand
         model = [DialogCommand(type=DialogCommandType.START_FLOW, targetSkill="MESSAGE_SEND",
                                slots={"messagePurpose": "产品到期提醒"}, confidence=0.9)]
         fallback = [DialogCommand(type=DialogCommandType.START_FLOW, targetSkill="MESSAGE_SEND",
@@ -106,6 +110,18 @@ class DialogueCommandInterpreterTest(unittest.TestCase):
 
         self.assertEqual("张伟", model[0].slots["customerReference"])
         self.assertEqual("产品到期提醒", model[0].slots["messagePurpose"])
+
+    def test_compound_model_commands_keep_only_highest_confidence_flow(self):
+        request = self.request("查询张伟AUM并给他生成产品到期提醒", [])
+        commands = [
+            DialogCommand(type=DialogCommandType.START_FLOW, targetSkill="CUSTOMER_AUM", confidence=0.81),
+            DialogCommand(type=DialogCommandType.START_FLOW, targetSkill="MESSAGE_SEND", confidence=0.92),
+        ]
+
+        selected = keep_highest_confidence_flow(commands, request)
+
+        self.assertEqual(1, len(selected))
+        self.assertEqual("MESSAGE_SEND", selected[0].targetSkill)
 
     def request(self, message, flows):
         return DialogueCommandRequest(

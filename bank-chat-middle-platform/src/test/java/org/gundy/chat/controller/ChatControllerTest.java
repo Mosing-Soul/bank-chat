@@ -4,6 +4,7 @@ import org.gundy.chat.entity.ChatResponse;
 import org.gundy.chat.entity.HistoryMessage;
 import org.gundy.chat.entity.intent.IntentRouteResult;
 import org.gundy.chat.service.AiChatService;
+import org.gundy.chat.service.ChatApplicationService;
 import org.gundy.chat.service.DialogStateMachineService;
 import org.gundy.chat.service.DialogStateService;
 import org.gundy.chat.service.DialogueOrchestrationService;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.util.ArrayList;
@@ -37,6 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ChatController.class)
+@Import(ChatApplicationService.class)
 class ChatControllerTest {
     @Autowired
     private org.springframework.test.web.servlet.MockMvc mockMvc;

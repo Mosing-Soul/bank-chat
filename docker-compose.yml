@@ -1,78 +1,113 @@
-version: '3.8'
+name: bank-chat
 
 networks:
   bank-net:
     driver: bridge
 
+volumes:
+  redis-data:
+  rag-vector-data:
+  huggingface-cache:
+  java-data:
+
+x-python-environment: &python-environment
+  PYTHON_SERVICE_HOST: 0.0.0.0
+  PYTHON_SERVICE_PORT: 8000
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  BANK_DOCS_FOLDER: /app/assets
+  VECTOR_DB_DIR: /app/chroma_db
+  BUILD_DOCUMENTS_DIR: /app/assets
+  BUILD_VECTOR_DB_DIR: /app/chroma_db
+  EMBEDDING_DEVICE: cpu
+  EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-false}
+  JAVA_SKILL_BASE_URL: http://java-backend:8080/internal/skills
+
+x-python-volumes: &python-volumes
+  - ./bank-agent-demo/assets:/app/assets:ro
+  - ./models:/app/models:ro
+  - rag-vector-data:/app/chroma_db
+  - huggingface-cache:/root/.cache/huggingface
+
 services:
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
     container_name: bank-redis
-    restart: always
-    networks:
-      - bank-net
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [bank-net]
+
+  rag-init:
+    image: bank-chat-python-rag:latest
+    build:
+      context: ./bank-agent-demo
+    profiles: ["tools"]
+    env_file: ["${DEPLOY_ENV_FILE:-./.env.deploy}"]
+    environment: *python-environment
+    command: ["python", "build_vector_store.py"]
+    volumes: *python-volumes
+    networks: [bank-net]
 
   python-rag:
-    build: ./bank-agent-demo
-#    image: bank-python-rag:1.0   # 可选，如果你已经构建好
+    image: bank-chat-python-rag:latest
+    build:
+      context: ./bank-agent-demo
     container_name: bank-python-rag
-    restart: always
-    env_file:
-      - ./bank-agent-demo/.env
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - BANK_DOCS_FOLDER=assets
-      - VECTOR_DB_DIR=chroma_db
-      - BUILD_DOCUMENTS_DIR=assets
-      - BUILD_VECTOR_DB_DIR=chroma_db
-    volumes:
-      - ./models:/root/.cache/huggingface
-      - ./chroma_db:/app/chroma_db
-    networks:
-      - bank-net
+    restart: unless-stopped
+    env_file: ["${DEPLOY_ENV_FILE:-./.env.deploy}"]
+    environment: *python-environment
+    volumes: *python-volumes
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert data['status']=='ok' and data['vectorStoreReady']"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    networks: [bank-net]
 
   java-backend:
-    build: ./bank-chat-middle-platform
-#    image: bank-java-backend:1.0
+    image: bank-chat-java-backend:latest
+    build:
+      context: ./bank-chat-middle-platform
     container_name: bank-java
-    restart: always
+    restart: unless-stopped
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - REDIS_HOST=redis
-      - RAG_SERVICE_URL=http://python-rag:8000/rag/query
-      - AI_CHAT_URL=http://python-rag:8000/ai/chat/invoke
-      - AI_DIALOGUE_COMMAND_URL=http://python-rag:8000/ai/dialogue/commands
-      - AI_DIALOGUE_COMMAND_ENABLED=true
-      - AI_DIALOGUE_AUTO_RESUME_READ_ONLY=true
-    networks:
-      - bank-net
-    depends_on:
-      - redis
-      - python-rag
-
-  streamlit:
-    build: ./bank-streamlit
-#    image: bank-streamlit:1.0
-    container_name: bank-streamlit
-    restart: always
-    networks:
-      - bank-net
-    # 不映射任何端口到宿主机
-
-  nginx:
-    image: nginx:alpine
-    container_name: bank-nginx
-    restart: always
-    ports:
-      - "80:80"          # 仅暴露 HTTP 端口
-      # - "443:443"      # 如需 HTTPS 再添加
+      SPRING_PROFILES_ACTIVE: docker
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RAG_SERVICE_URL: http://python-rag:8000/rag/query
+      AI_CHAT_URL: http://python-rag:8000/ai/chat/invoke
+      AI_DIALOGUE_COMMAND_URL: http://python-rag:8000/ai/dialogue/commands
+      AI_DIALOGUE_COMMAND_ENABLED: "true"
+      AI_DIALOGUE_AUTO_RESUME_READ_ONLY: "true"
+      INTERNAL_SKILL_API_KEY: ${INTERNAL_SKILL_API_KEY}
+      SKILL_CONFIG_SQLITE_PATH: /app/data/bank-chat-skill-config.db
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
-    networks:
-      - bank-net
+      - java-data:/app/data
     depends_on:
-      - streamlit
-      - java-backend
+      redis:
+        condition: service_healthy
+      python-rag:
+        condition: service_healthy
+    networks: [bank-net]
+
+  frontend:
+    image: bank-chat-frontend:latest
+    build:
+      context: ./bank-front-end
+    container_name: bank-frontend
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on: [java-backend]
+    networks: [bank-net]

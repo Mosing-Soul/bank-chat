@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+.idea
+__pycache__
+*.py[cod]
+bank_vector_db
+python/chroma_db
+bank_docs
+*.log

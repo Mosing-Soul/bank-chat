@@ -25,7 +25,7 @@ class IntentEntities(BaseModel):
 
 class IntentResult(BaseModel):
     intent: IntentType
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
     selectedIntents: List[IntentType] = Field(default_factory=list)
     rewrittenQuery: Optional[str] = None
     entities: IntentEntities = Field(default_factory=IntentEntities)
@@ -52,6 +52,8 @@ class AiChatRequest(BaseModel):
 class Citation(BaseModel):
     source: str
     title: Optional[str] = None
+    type: str = "INTERNAL"
+    url: Optional[str] = None
 
 
 class SkillCall(BaseModel):

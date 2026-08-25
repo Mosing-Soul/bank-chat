@@ -1,5 +1,7 @@
 import time
+from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from ai_chat_models import AiChatError, AiChatRequest, AiChatResponse, Citation, IntentType, SkillCall
 
@@ -19,11 +21,12 @@ def forced_intent_from_skill(skill: Optional[str]) -> Optional[IntentType]:
 class AiChatOrchestrator:
     """Phase-1 conversational pipeline: classify, collect evidence, answer once."""
 
-    def __init__(self, intent_service, rag_service, external_search_client, answer_llm):
+    def __init__(self, intent_service, rag_service, external_search_client, answer_llm, now_provider=None):
         self._intent_service = intent_service
         self._rag_service = rag_service
         self._external_search = external_search_client
         self._answer_llm = answer_llm
+        self._now_provider = now_provider or (lambda: datetime.now(ZoneInfo("Asia/Shanghai")))
 
     def invoke(self, payload: AiChatRequest) -> AiChatResponse:
         started = time.perf_counter()
@@ -40,6 +43,7 @@ class AiChatOrchestrator:
             return self._clarification(payload, intent, started)
 
         query = intent.rewrittenQuery or payload.message
+        current_date = self._now_provider().strftime("%Y-%m-%d")
         internal_context = ""
         external_context = ""
         citations = []
@@ -61,14 +65,24 @@ class AiChatOrchestrator:
             try:
                 if self._external_search is None:
                     raise RuntimeError("external search is not configured")
-                external_context = self._external_search.search_text(query)
+                dated_query = f"{query}\n当前日期（北京时间）：{current_date}"
+                if hasattr(self._external_search, "search_with_sources"):
+                    search_result = self._external_search.search_with_sources(dated_query)
+                    external_context = search_result.context
+                    citations.extend(
+                        Citation(source=source.url, title=source.title, type="WEB", url=source.url)
+                        for source in search_result.sources
+                    )
+                else:
+                    external_context = self._external_search.search_text(dated_query)
                 ok = True
             except Exception as exc:
                 errors.append(f"EXTERNAL_SEARCH_ERROR:{type(exc).__name__}")
                 ok = False
             calls.append(self._call("external-search", call_started, ok))
 
-        answer = self._answer(payload, query, internal_context, external_context)
+        answer = self._answer(payload, query, internal_context, external_context, current_date)
+        answer = self._append_internal_sources(answer, citations)
         calls.append(self._call("unified-answer-llm", started, True))
         data = {
             "intentAnalysis": {
@@ -90,11 +104,14 @@ class AiChatOrchestrator:
             sources=[item.source for item in citations], skillCalls=calls, error=error,
         )
 
-    def _answer(self, payload, query, internal_context, external_context):
+    def _answer(self, payload, query, internal_context, external_context, current_date):
         history = "\n".join(f"{item.role}: {item.content}" for item in payload.history[-8:]) or "（无）"
         prompt = f"""你是银行客户经理智能助手。请统一整理证据并直接回答用户，不要暴露路由或节点名。
 内部文档是行内依据；外部搜索是公开信息，涉及时间敏感内容要提示时效。证据不足时明确说明，禁止编造。
 若两类证据都有，综合回答并清楚区分内部规定与外部信息。回答简洁、自然，使用必要的 Markdown。
+当前日期（北京时间）：{current_date}。不得把当前日期之后的内容描述成已经发生；搜索结果只有月日而没有年份时，不得擅自推断为今年。
+外部证据按 WEB 编号提供。引用外部事实时，必须紧跟一个可点击的 Markdown 链接，格式为 [↗](对应URL)；只能使用证据中真实出现的URL。
+不要在回答末尾另列外部来源清单。不要自行输出行内来源清单，系统会统一追加行内文件来源。
 
 最近对话：
 {history}
@@ -115,6 +132,16 @@ class AiChatOrchestrator:
             return (result.content if hasattr(result, "content") else str(result)).strip()
         except Exception:
             return "当前大模型服务不可用，请稍后再试。"
+
+    @staticmethod
+    def _append_internal_sources(answer, citations):
+        files = list(dict.fromkeys(
+            item.source for item in citations if item.type == "INTERNAL" and item.source
+        ))
+        if not files:
+            return answer
+        source_lines = "\n".join(f"- `{source}`" for source in files)
+        return f"{answer.rstrip()}\n\n---\n\n📚 **行内来源**\n\n{source_lines}"
 
     @staticmethod
     def _call(name, started, success):

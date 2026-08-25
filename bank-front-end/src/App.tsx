@@ -978,7 +978,16 @@ function MessageBubble({
           message.content
         ) : (
           <div className="markdown-content">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                a: ({ node: _node, ...props }) => (
+                  <a {...props} target="_blank" rel="noreferrer noopener" />
+                ),
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
           </div>
         )}
         {streaming ? <span className="stream-caret" /> : null}

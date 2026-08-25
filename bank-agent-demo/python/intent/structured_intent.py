@@ -12,9 +12,18 @@ SYSTEM_PROMPT = """
 - GENERAL_CHAT：无需检索即可回答，或者无法可靠判断时的兜底。
 - UNKNOWN：只有多个目标互斥且必须由用户选择时才使用。
 
+分类示例：
+- “华辰银行白金级客户的资产门槛是多少？” → KNOWLEDGE_QA
+- “办消费信用贷要交哪些收入和用途证明？” → KNOWLEDGE_QA
+- “今天黄金价格是多少？” → EXTERNAL_API_QUERY
+- “结合行内黄金产品规定和今天金价分析风险” → 同时选择 KNOWLEDGE_QA、EXTERNAL_API_QUERY
+- “你好” → GENERAL_CHAT
+
 可以同时选择 KNOWLEDGE_QA 和 EXTERNAL_API_QUERY。selectedIntents 写入全部需要执行的意图；
 intent 写主意图；rewrittenQuery 结合最近对话消解指代，改写成独立可检索的问题。
+当当前输入包含“这个、它、那、如果……呢”等省略表达时，rewrittenQuery 必须补全上一轮的业务对象和用户真正要问的内容，不能原样保留省略句。
 普通模糊问题使用 GENERAL_CHAT，不要返回 UNKNOWN。reason 只写一句简短依据。
+必须以 JSON 对象返回符合 IntentResult 字段定义的结果，不要输出 JSON 之外的文字。
 """
 
 try:
@@ -43,7 +52,10 @@ class IntentRecognitionService:
             if self.llm is None or PROMPT is None:
                 result = fallback_intent(user_input)
             else:
-                result = (PROMPT | self.llm.with_structured_output(IntentResult)).invoke({
+                result = (PROMPT | self.llm.with_structured_output(
+                    IntentResult,
+                    method="json_schema",
+                )).invoke({
                     "user_input": user_input,
                     "history": history_text,
                 })

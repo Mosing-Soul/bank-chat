@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime
 from types import SimpleNamespace
 
 from ai_chat_models import AiChatRequest, HistoryMessage, IntentResult, IntentType
@@ -33,6 +34,16 @@ class FakeSearch:
         return "外部公开信息"
 
 
+class FakeStructuredSearch:
+    def search_with_sources(self, query):
+        return SimpleNamespace(
+            context="[WEB-1] 标题：监管公告\nURL：https://example.com/policy",
+            sources=[SimpleNamespace(
+                title="监管公告", url="https://example.com/policy", snippet="", date="2026-08-20"
+            )],
+        )
+
+
 class FakeLlm:
     def __init__(self):
         self.prompts = []
@@ -43,6 +54,10 @@ class FakeLlm:
 
 
 class ConversationPipelineTest(unittest.TestCase):
+    @staticmethod
+    def fixed_now():
+        return datetime(2026, 8, 25, 12, 0, 0)
+
     def payload(self):
         return AiChatRequest(
             traceId="t1", sessionId="s1", message="那现在外部有什么变化？",
@@ -57,14 +72,22 @@ class ConversationPipelineTest(unittest.TestCase):
             confidence=0.93,
         ))
         rag, search, llm = FakeRag(), FakeSearch(), FakeLlm()
-        response = AiChatOrchestrator(intent_service, rag, search, llm).invoke(self.payload())
+        response = AiChatOrchestrator(
+            intent_service, rag, search, llm, now_provider=self.fixed_now
+        ).invoke(self.payload())
 
         self.assertEqual(["消费贷款办理规则及当前外部变化"], rag.queries)
-        self.assertEqual(["消费贷款办理规则及当前外部变化"], search.queries)
+        self.assertEqual(
+            ["消费贷款办理规则及当前外部变化\n当前日期（北京时间）：2026-08-25"],
+            search.queries,
+        )
         self.assertEqual(1, len(llm.prompts))
         self.assertIn("内部SOP证据", llm.prompts[0])
         self.assertIn("外部公开信息", llm.prompts[0])
-        self.assertEqual("统一生成的答案", response.answer)
+        self.assertIn("当前日期（北京时间）：2026-08-25", llm.prompts[0])
+        self.assertTrue(response.answer.startswith("统一生成的答案"))
+        self.assertIn("📚 **行内来源**", response.answer)
+        self.assertIn("`消费贷款SOP.pdf`", response.answer)
         self.assertEqual(["消费贷款SOP.pdf"], response.sources)
         self.assertEqual(3, len(response.skillCalls))
         self.assertEqual(self.payload().history, intent_service.history)
@@ -79,6 +102,23 @@ class ConversationPipelineTest(unittest.TestCase):
         self.assertEqual([], rag.queries)
         self.assertEqual([], search.queries)
         self.assertEqual("统一生成的答案", response.answer)
+
+    def test_external_sources_are_kept_as_web_citations_for_inline_links(self):
+        service = StaticIntentService(IntentResult(
+            intent=IntentType.EXTERNAL_API_QUERY,
+            selectedIntents=[IntentType.EXTERNAL_API_QUERY],
+            rewrittenQuery="最近消费贷监管新闻",
+            confidence=0.9,
+        ))
+        llm = FakeLlm()
+        response = AiChatOrchestrator(
+            service, FakeRag(), FakeStructuredSearch(), llm, now_provider=self.fixed_now
+        ).invoke(self.payload())
+
+        self.assertEqual("WEB", response.citations[0].type)
+        self.assertEqual("https://example.com/policy", response.citations[0].url)
+        self.assertIn("[↗](对应URL)", llm.prompts[0])
+        self.assertIn("URL：https://example.com/policy", llm.prompts[0])
 
     def test_true_ambiguity_returns_selection_without_answer_model(self):
         service = StaticIntentService(IntentResult(

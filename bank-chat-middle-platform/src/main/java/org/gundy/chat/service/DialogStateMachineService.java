@@ -76,14 +76,18 @@ public class DialogStateMachineService {
     }
 
     private String normalizeSkill(String skillName) {
-        return LegacyIntentFallback.normalizeSkill(skillName);
+        if (skillName == null) return null;
+        String value = skillName.trim().toUpperCase();
+        if ("RAG_QUERY".equals(value) || "RULE_QUERY".equals(value)) return "RAG_QUERY";
+        if ("GOLD_PRICE".equals(value) || "EXTERNAL_SEARCH".equals(value)) return "GOLD_PRICE";
+        return null;
     }
 
     private String detectIntent(String userMessage) {
-        return LegacyIntentFallback.detectIntent(userMessage);
+        return null;
     }
 
     private boolean isExplicitSwitch(String userMessage) {
-        return LegacyIntentFallback.isExplicitSwitch(userMessage);
+        return false;
     }
 }

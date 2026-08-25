@@ -4,7 +4,6 @@ import {
   ArrowLeftOutlined,
   BankOutlined,
   CheckCircleOutlined,
-  ClockCircleOutlined,
   ClearOutlined,
   DeleteOutlined,
   DownOutlined,
@@ -19,7 +18,6 @@ import {
   SendOutlined,
   SettingOutlined,
   StopOutlined,
-  TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { App as AntApp, Button, Input, Slider, Switch, Tooltip } from 'antd';
@@ -54,9 +52,7 @@ interface GreetingConfig {
 type WorkspaceMode = 'chat' | 'config';
 
 const iconByName = {
-  team: <TeamOutlined />,
   gold: <GoldOutlined />,
-  clock: <ClockCircleOutlined />,
   product: <ProductOutlined />,
   bank: <BankOutlined />,
 };

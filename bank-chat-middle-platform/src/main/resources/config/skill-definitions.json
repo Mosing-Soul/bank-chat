@@ -1,163 +1,31 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "skills": [
     {
-      "id": "CUSTOMER_AUM",
-      "name": "客户资产查询",
-      "description": "查询指定客户的AUM、资产和持仓汇总。",
-      "enabled": true,
-      "riskLevel": "READ_ONLY",
-      "interruptPolicy": "SUSPENDABLE",
-      "confirmationRequired": false,
-      "executor": "customerAumExecutor",
-      "domains": ["customer", "wealth-management"],
-      "slots": [
-        {
-          "id": "customerReference",
-          "type": "customer_reference",
-          "required": true,
-          "sensitive": true,
-          "shareable": true,
-          "validationPolicy": "existing_customer",
-          "prompts": ["请提供客户姓名或客户编号。"]
-        }
-      ],
-      "flow": {
-        "id": "CUSTOMER_AUM_FLOW",
-        "initialStage": "COLLECTING_SLOTS",
-        "stages": [
-          {"id": "COLLECTING_SLOTS", "type": "COLLECT", "requiredSlots": ["customerReference"], "terminal": false},
-          {"id": "VALIDATING", "type": "VALIDATE", "requiredSlots": [], "terminal": false},
-          {"id": "EXECUTING", "type": "EXECUTE", "requiredSlots": [], "terminal": false},
-          {"id": "COMPLETED", "type": "COMPLETE", "requiredSlots": [], "terminal": true},
-          {"id": "CANCELLED", "type": "CANCEL", "requiredSlots": [], "terminal": true}
-        ]
-      }
-    },
-    {
       "id": "GOLD_PRICE",
-      "name": "市场价格查询",
-      "description": "查询黄金、金价和Au9999等外部市场行情。",
+      "name": "外部信息搜索",
+      "description": "查询市场行情、新闻、天气、汇率等外部公开信息。",
       "enabled": true,
       "riskLevel": "EXTERNAL_READ",
       "interruptPolicy": "REPLACEABLE",
       "confirmationRequired": false,
-      "executor": "goldPriceExecutor",
-      "domains": ["market", "precious-metal"],
-      "slots": [
-        {
-          "id": "query",
-          "type": "text",
-          "required": true,
-          "sensitive": false,
-          "shareable": false,
-          "validationPolicy": "non_blank",
-          "prompts": ["请说明需要查询的黄金品种或行情问题。"]
-        },
-        {
-          "id": "marketSymbol",
-          "type": "market_symbol",
-          "required": false,
-          "sensitive": false,
-          "shareable": true,
-          "validationPolicy": "supported_market_symbol",
-          "prompts": []
-        }
-      ],
-      "flow": {
-        "id": "GOLD_PRICE_FLOW",
-        "initialStage": "COLLECTING_SLOTS",
-        "stages": [
-          {"id": "COLLECTING_SLOTS", "type": "COLLECT", "requiredSlots": ["query"], "terminal": false},
-          {"id": "EXECUTING", "type": "EXECUTE", "requiredSlots": [], "terminal": false},
-          {"id": "COMPLETED", "type": "COMPLETE", "requiredSlots": [], "terminal": true},
-          {"id": "CANCELLED", "type": "CANCEL", "requiredSlots": [], "terminal": true}
-        ]
-      }
+      "executor": "externalSearchExecutor",
+      "domains": ["external-search"],
+      "slots": [],
+      "flow": null
     },
     {
       "id": "RAG_QUERY",
       "name": "行内知识问答",
-      "description": "查询行内制度、产品规则、客户等级规则和监管材料。",
+      "description": "查询行内制度、产品规则、客户等级规则、SOP和监管材料。",
       "enabled": true,
       "riskLevel": "READ_ONLY",
       "interruptPolicy": "REPLACEABLE",
       "confirmationRequired": false,
       "executor": "ragQueryExecutor",
-      "domains": ["knowledge", "policy", "product"],
-      "slots": [
-        {
-          "id": "question",
-          "type": "text",
-          "required": true,
-          "sensitive": false,
-          "shareable": false,
-          "validationPolicy": "non_blank",
-          "prompts": ["请说明需要查询的规则、制度或产品问题。"]
-        }
-      ],
-      "flow": {
-        "id": "RAG_QUERY_FLOW",
-        "initialStage": "COLLECTING_SLOTS",
-        "stages": [
-          {"id": "COLLECTING_SLOTS", "type": "COLLECT", "requiredSlots": ["question"], "terminal": false},
-          {"id": "EXECUTING", "type": "EXECUTE", "requiredSlots": [], "terminal": false},
-          {"id": "COMPLETED", "type": "COMPLETE", "requiredSlots": [], "terminal": true},
-          {"id": "CANCELLED", "type": "CANCEL", "requiredSlots": [], "terminal": true}
-        ]
-      }
-    },
-    {
-      "id": "MESSAGE_SEND",
-      "name": "客户消息触达",
-      "description": "生成客户消息，并在明确确认后执行模拟发送。",
-      "enabled": true,
-      "riskLevel": "EXTERNAL_SIDE_EFFECT",
-      "interruptPolicy": "CONFIRM_OR_SUSPEND",
-      "confirmationRequired": true,
-      "executor": "messageSendExecutor",
-      "domains": ["customer", "message", "outreach"],
-      "slots": [
-        {
-          "id": "customerReference",
-          "type": "customer_reference",
-          "required": true,
-          "sensitive": true,
-          "shareable": true,
-          "validationPolicy": "existing_customer",
-          "prompts": ["请提供需要触达的客户姓名或客户编号。"]
-        },
-        {
-          "id": "messagePurpose",
-          "type": "text",
-          "required": true,
-          "sensitive": false,
-          "shareable": false,
-          "validationPolicy": "supported_template_or_custom_content",
-          "prompts": ["请说明消息用途或需要发送的内容。"]
-        },
-        {
-          "id": "messageContent",
-          "type": "text",
-          "required": false,
-          "sensitive": true,
-          "shareable": false,
-          "validationPolicy": "message_content_policy",
-          "prompts": []
-        }
-      ],
-      "flow": {
-        "id": "MESSAGE_SEND_FLOW",
-        "initialStage": "COLLECTING_SLOTS",
-        "stages": [
-          {"id": "COLLECTING_SLOTS", "type": "COLLECT", "requiredSlots": ["customerReference", "messagePurpose"], "terminal": false},
-          {"id": "VALIDATING", "type": "VALIDATE", "requiredSlots": [], "terminal": false},
-          {"id": "WAITING_CONFIRMATION", "type": "CONFIRM", "requiredSlots": [], "terminal": false},
-          {"id": "EXECUTING", "type": "EXECUTE", "requiredSlots": [], "terminal": false},
-          {"id": "COMPLETED", "type": "COMPLETE", "requiredSlots": [], "terminal": true},
-          {"id": "CANCELLED", "type": "CANCEL", "requiredSlots": [], "terminal": true}
-        ]
-      }
+      "domains": ["knowledge"],
+      "slots": [],
+      "flow": null
     }
   ]
 }

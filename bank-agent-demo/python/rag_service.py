@@ -10,18 +10,13 @@ from fastapi import FastAPI, Request
 from ai_chat_models import (
     AiChatRequest,
     AiChatResponse,
-    DialogueCommandRequest,
-    DialogueCommandResponse,
     IntentType,
 )
 from ai_chat_orchestrator import AiChatOrchestrator, forced_intent_from_skill
-from dialogue.command_interpreter import DialogueCommandInterpreter
 from env_config import env_bool, env_float, env_int, env_path, optional_env, require_env
 from intent.structured_intent import IntentRecognitionService
 from rag_models import QueryRequest, QueryResponse
 from rag_query_service import RagService, build_rag_answer_prompt, unique_sources
-from skill_handlers import ExternalModelApiSkill, GeneralChatSkill, KnowledgeRagSkill
-from skill_router import SkillRouter
 from vector_store_manager import VectorStoreManager
 
 
@@ -58,8 +53,6 @@ class RuntimeResources:
     vector_store_manager: VectorStoreManager
     rag_service: RagService
     intent_service: IntentRecognitionService
-    dialogue_interpreter: DialogueCommandInterpreter
-    skill_router: SkillRouter
     ai_chat_orchestrator: AiChatOrchestrator
 
 
@@ -82,8 +75,6 @@ def initialize_runtime() -> RuntimeResources:
         settings.rag_top_k,
     )
     intent_service = IntentRecognitionService(intent_llm)
-    dialogue_interpreter = DialogueCommandInterpreter(llm)
-    skill_router = build_skill_router(rag_service, external_search_client, llm)
     ai_chat_orchestrator = AiChatOrchestrator(intent_service, rag_service, external_search_client, llm)
     return RuntimeResources(
         settings=settings,
@@ -93,8 +84,6 @@ def initialize_runtime() -> RuntimeResources:
         vector_store_manager=vector_store_manager,
         rag_service=rag_service,
         intent_service=intent_service,
-        dialogue_interpreter=dialogue_interpreter,
-        skill_router=skill_router,
         ai_chat_orchestrator=ai_chat_orchestrator,
     )
 
@@ -132,14 +121,6 @@ def create_external_search_client():
     except (ExternalSearchConfigError, RuntimeError) as exc:
         logger.warning("external search client disabled: %s", exc)
         return None
-
-
-def build_skill_router(rag_service, external_search_client, llm) -> SkillRouter:
-    return SkillRouter({
-        IntentType.KNOWLEDGE_QA: KnowledgeRagSkill(rag_service.query),
-        IntentType.EXTERNAL_API_QUERY: ExternalModelApiSkill(external_search_client, llm),
-        IntentType.GENERAL_CHAT: GeneralChatSkill(llm),
-    })
 
 
 @asynccontextmanager
@@ -186,12 +167,6 @@ def rag_eval_query(payload: QueryRequest, request: Request):
 @app.post("/ai/chat/invoke", response_model=AiChatResponse)
 def ai_chat_invoke(payload: AiChatRequest, request: Request):
     return runtime_from_request(request).ai_chat_orchestrator.invoke(payload)
-
-
-@app.post("/ai/dialogue/commands", response_model=DialogueCommandResponse)
-def dialogue_commands(payload: DialogueCommandRequest, request: Request):
-    """Shadow endpoint; Java policy validates commands before execution."""
-    return runtime_from_request(request).dialogue_interpreter.interpret(payload)
 
 
 @app.post("/refresh")

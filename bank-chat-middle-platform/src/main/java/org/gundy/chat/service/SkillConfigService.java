@@ -52,7 +52,7 @@ public class SkillConfigService {
     }
 
     public synchronized SkillConfigResponse getConfig() {
-        this.skills = loadPersistedOrCurrent();
+        this.skills = sanitizeSkills(loadPersistedOrCurrent());
         SkillConfigResponse response = new SkillConfigResponse();
         response.setSkills(skills);
         response.setQuickActions(filterExamples(true, false));
@@ -65,6 +65,7 @@ public class SkillConfigService {
         if (nextSkills == null || nextSkills.isEmpty()) {
             nextSkills = buildDefaultSkills();
         }
+        nextSkills = sanitizeSkills(nextSkills);
         normalizeConfig(nextSkills);
         this.skills = nextSkills;
         persist(nextSkills);
@@ -78,7 +79,7 @@ public class SkillConfigService {
     }
 
     public synchronized List<SkillConfig> allSkills() {
-        this.skills = loadPersistedOrCurrent();
+        this.skills = sanitizeSkills(loadPersistedOrCurrent());
         return new ArrayList<SkillConfig>(skills);
     }
 
@@ -260,7 +261,7 @@ public class SkillConfigService {
     }
 
     private List<SkillConfig> loadPersistedOrDefault() {
-        List<SkillConfig> persisted = loadPersisted();
+        List<SkillConfig> persisted = sanitizeSkills(loadPersisted());
         if (persisted == null || persisted.isEmpty()) {
             List<SkillConfig> defaults = buildDefaultSkills();
             persist(defaults);
@@ -273,7 +274,7 @@ public class SkillConfigService {
     }
 
     private List<SkillConfig> loadPersistedOrCurrent() {
-        List<SkillConfig> persisted = loadPersisted();
+        List<SkillConfig> persisted = sanitizeSkills(loadPersisted());
         if (persisted != null && migrateLegacyRedemptionExample(persisted)) {
             persist(persisted);
         }
@@ -370,16 +371,22 @@ public class SkillConfigService {
         }
     }
 
+    private List<SkillConfig> sanitizeSkills(List<SkillConfig> values) {
+        if (values == null) {
+            return null;
+        }
+        List<SkillConfig> result = new ArrayList<SkillConfig>();
+        for (SkillConfig skill : values) {
+            String code = skill == null ? null : skill.getSkillCode();
+            if ("RAG_QUERY".equals(code) || "GOLD_PRICE".equals(code) || "GENERAL_CHAT".equals(code)) {
+                result.add(skill);
+            }
+        }
+        return result;
+    }
+
     private List<SkillConfig> buildDefaultSkills() {
         List<SkillConfig> configs = new ArrayList<SkillConfig>();
-
-        SkillConfig customer = new SkillConfig("CUSTOMER_AUM", "客户资产查询",
-                "查询具体客户AUM、资产、持仓、客户等级，需要客户姓名或客户ID。", true, true, true, 80,
-                "查询某位客户的资产、持仓、AUM或客户等级。");
-        customer.getExamples().add(example("ex-aum-1", "CUSTOMER_AUM", "查询客户张伟AUM", "查询客户张伟AUM", "team", 0.92D, true, true, false, true, 10));
-        customer.getExamples().add(example("ex-aum-2", "CUSTOMER_AUM", "查一下客户张伟的资产", "查询客户资产", "team", 0.88D, true, false, true, true, 11));
-        customer.getExamples().add(example("ex-aum-3", "CUSTOMER_AUM", "客户张伟当前持仓是多少", "查询客户持仓", "team", 0.86D, false, false, false, true, 12));
-        customer.getExamples().add(example("ex-aum-4", "CUSTOMER_AUM", "张伟的客户等级是多少", "查询客户等级", "team", 0.84D, false, false, false, true, 13));
 
         SkillConfig gold = new SkillConfig("GOLD_PRICE", "市场价格查询",
                 "查询黄金、金价、Au9999等外部实时行情。", true, true, true, 70,
@@ -387,13 +394,6 @@ public class SkillConfigService {
         gold.getExamples().add(example("ex-gold-1", "GOLD_PRICE", "黄金价格是多少", "黄金价格", "gold", 0.92D, true, true, false, true, 20));
         gold.getExamples().add(example("ex-gold-2", "GOLD_PRICE", "现在金价多少", "查询当前金价", "gold", 0.9D, true, false, true, true, 21));
         gold.getExamples().add(example("ex-gold-3", "GOLD_PRICE", "Au9999现在多少钱", "查询Au9999行情", "gold", 0.88D, false, false, false, true, 22));
-
-        SkillConfig message = new SkillConfig("MESSAGE_SEND", "客户消息发送",
-                "为客户生成、预览或确认发送提醒、通知、触达消息。", true, true, true, 90,
-                "生成或发送客户提醒、通知、触达消息。");
-        message.getExamples().add(example("ex-msg-1", "MESSAGE_SEND", "给张伟发送产品到期提醒", "产品到期提醒", "clock", 0.92D, true, true, false, true, 30));
-        message.getExamples().add(example("ex-msg-2", "MESSAGE_SEND", "给张伟发送资产配置提醒", "资产配置提醒", "clock", 0.9D, true, false, true, true, 31));
-        message.getExamples().add(example("ex-msg-3", "MESSAGE_SEND", "给客户发消息", "生成客户消息", "clock", 0.84D, false, false, false, true, 32));
 
         SkillConfig rag = new SkillConfig("RAG_QUERY", "行内知识问答",
                 "查询行内制度、客户等级规则、反洗钱法规、监管材料等知识。", true, true, true, 75,
@@ -410,9 +410,7 @@ public class SkillConfigService {
                 "直接由模型回答这个问题。");
         chat.getExamples().add(example("ex-chat-1", "GENERAL_CHAT", "介绍一下你能做什么", "介绍助手能力", "bank", 0.78D, false, false, false, false, 90));
 
-        configs.add(customer);
         configs.add(gold);
-        configs.add(message);
         configs.add(rag);
         configs.add(chat);
         return configs;

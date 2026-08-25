@@ -72,8 +72,6 @@ def runtime(llm=None, vector_store=None, threshold=0.5, top_k=5):
 
 class RagServiceCharacterizationTest(unittest.TestCase):
     @patch("rag_service.AiChatOrchestrator")
-    @patch("rag_service.build_skill_router")
-    @patch("rag_service.DialogueCommandInterpreter")
     @patch("rag_service.IntentRecognitionService")
     @patch("rag_service.VectorStoreManager")
     @patch("rag_service.create_external_search_client")
@@ -88,8 +86,6 @@ class RagServiceCharacterizationTest(unittest.TestCase):
         search_factory,
         manager_type,
         intent_type,
-        dialogue_type,
-        router_builder,
         orchestrator_type,
     ):
         embedding_factory.return_value = "embedding"
@@ -98,13 +94,11 @@ class RagServiceCharacterizationTest(unittest.TestCase):
         search_factory.return_value = "search"
         manager = manager_type.return_value
         manager.get.return_value = "store"
-        router_builder.return_value = "router"
 
         resources = initialize_runtime()
 
         manager_type.assert_called_once_with(resources.settings.vector_db_dir, "embedding")
         manager.load.assert_called_once_with()
-        router_builder.assert_called_once_with(resources.rag_service, "search", "llm")
         intent_type.assert_called_once_with("intent-llm")
         orchestrator_type.assert_called_once_with(intent_type.return_value, resources.rag_service, "search", "llm")
 
@@ -162,7 +156,7 @@ class RagServiceCharacterizationTest(unittest.TestCase):
         self.assertEqual(1, sum(route.path == "/health" for route in app.routes))
         self.assertTrue({
             "/health", "/rag/query", "/rag/eval_query", "/ai/chat/invoke",
-            "/ai/dialogue/commands", "/refresh",
+            "/refresh",
         }.issubset(paths))
 
     @patch("rag_service.initialize_runtime")

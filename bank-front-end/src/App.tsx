@@ -65,24 +65,10 @@ const iconFor = (name?: string) => iconByName[(name || 'bank') as keyof typeof i
 
 const defaultQuickQuestions: QuickQuestion[] = [
   {
-    icon: <TeamOutlined />,
-    label: '查询客户张伟AUM',
-    value: '查询客户张伟AUM',
-    requestedSkill: 'CUSTOMER_AUM',
-    forceWhenClicked: true,
-  },
-  {
     icon: <GoldOutlined />,
     label: '黄金价格',
     value: '黄金价格',
     requestedSkill: 'GOLD_PRICE',
-    forceWhenClicked: true,
-  },
-  {
-    icon: <ClockCircleOutlined />,
-    label: '产品到期提醒',
-    value: '产品到期提醒',
-    requestedSkill: 'MESSAGE_SEND',
     forceWhenClicked: true,
   },
   {
@@ -94,26 +80,14 @@ const defaultQuickQuestions: QuickQuestion[] = [
   },
 ];
 
-const placeholders = ['例如：查询客户张伟的AUM', '黄金价格是多少？', '给张伟发送到期提醒'];
+const placeholders = ['例如：白金级客户的资产门槛是多少？', '黄金价格是多少？', '消费贷款办理需要哪些材料？'];
 
 const defaultGreetings: GreetingConfig[] = [
-  {
-    text: '今日可跟进高资产客户的资产变化，点击填入查询指令。',
-    prompt: '帮我查询高资产客户的AUM变化',
-    skill: '客户资产查询',
-    requestedSkill: 'CUSTOMER_AUM',
-  },
   {
     text: '黄金价格波动较快，可随时查询当前参考价。',
     prompt: '黄金价格是多少？',
     skill: '市场价格查询',
     requestedSkill: 'GOLD_PRICE',
-  },
-  {
-    text: '今日有客户存在产品到期机会，建议及时触达。',
-    prompt: '给张伟发送到期提醒',
-    skill: '到期提醒',
-    requestedSkill: 'MESSAGE_SEND',
   },
   {
     text: '遇到反洗钱业务疑问时，可查询法规中的临时冻结时限。',
@@ -149,7 +123,7 @@ function App() {
     window.location.hash === '#config' ? 'config' : 'chat',
   );
   const [skillConfigs, setSkillConfigs] = useState<SkillConfig[]>([]);
-  const [activeSkillCode, setActiveSkillCode] = useState<string>('CUSTOMER_AUM');
+  const [activeSkillCode, setActiveSkillCode] = useState<string>('RAG_QUERY');
   const [quickQuestions, setQuickQuestions] = useState<QuickQuestion[]>(defaultQuickQuestions);
   const [greetings, setGreetings] = useState<GreetingConfig[]>(defaultGreetings);
   const [question, setQuestion] = useState('');
@@ -175,12 +149,14 @@ function App() {
   const activeSkill = skillConfigs.find((skill) => skill.skillCode === activeSkillCode) ?? skillConfigs[0];
 
   const applySkillConfig = (config: { skills: SkillConfig[]; quickActions: SkillExampleConfig[]; greetings: SkillExampleConfig[] }) => {
-    const skillNameByCode = new Map(config.skills.map((skill) => [skill.skillCode, skill.skillName]));
-    const nextQuickQuestions = config.quickActions.map(quickQuestionFromExample);
-    const nextGreetings = config.greetings.map((item) => greetingFromExample(item, skillNameByCode.get(item.skillCode)));
-    setSkillConfigs(config.skills);
-    if (config.skills.length > 0 && !config.skills.some((skill) => skill.skillCode === activeSkillCode)) {
-      setActiveSkillCode(config.skills[0].skillCode);
+    const enabledCodes = new Set(['RAG_QUERY', 'GOLD_PRICE']);
+    const visibleSkills = config.skills.filter((skill) => enabledCodes.has(skill.skillCode));
+    const skillNameByCode = new Map(visibleSkills.map((skill) => [skill.skillCode, skill.skillName]));
+    const nextQuickQuestions = config.quickActions.filter((item) => enabledCodes.has(item.skillCode)).map(quickQuestionFromExample);
+    const nextGreetings = config.greetings.filter((item) => enabledCodes.has(item.skillCode)).map((item) => greetingFromExample(item, skillNameByCode.get(item.skillCode)));
+    setSkillConfigs(visibleSkills);
+    if (visibleSkills.length > 0 && !visibleSkills.some((skill) => skill.skillCode === activeSkillCode)) {
+      setActiveSkillCode(visibleSkills[0].skillCode);
     }
     if (nextQuickQuestions.length > 0) {
       setQuickQuestions(nextQuickQuestions);
@@ -196,8 +172,9 @@ function App() {
     fetchSkillConfig()
       .then((config) => {
         applySkillConfig(config);
-        if (config.skills.length > 0) {
-          setActiveSkillCode(config.skills[0].skillCode);
+        const firstVisibleSkill = config.skills.find((skill) => ['RAG_QUERY', 'GOLD_PRICE'].includes(skill.skillCode));
+        if (firstVisibleSkill) {
+          setActiveSkillCode(firstVisibleSkill.skillCode);
         }
       })
       .catch(() => {
@@ -358,7 +335,9 @@ function App() {
           question: content,
           sessionId,
           requestedSkill: skillToRequest,
-          forceSkill: forceSkill || Boolean(skillToRequest),
+          // Typing/editing an example must still use LLM intent recognition.
+          // Only an explicit action button may force a route.
+          forceSkill,
         },
         requestController.signal,
         (progress) => {

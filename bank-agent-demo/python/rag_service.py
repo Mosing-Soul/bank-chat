@@ -16,18 +16,11 @@ from ai_chat_models import (
 )
 from ai_chat_orchestrator import AiChatOrchestrator, forced_intent_from_skill
 from dialogue.command_interpreter import DialogueCommandInterpreter
-from env_config import env_bool, env_float, env_int, env_path, require_env
+from env_config import env_bool, env_float, env_int, env_path, optional_env, require_env
 from intent.structured_intent import IntentRecognitionService
-from java_skill_client import JavaSkillClient
 from rag_models import QueryRequest, QueryResponse
 from rag_query_service import RagService, build_rag_answer_prompt, unique_sources
-from skill_handlers import (
-    CustomerAumSkill,
-    ExternalModelApiSkill,
-    GeneralChatSkill,
-    KnowledgeRagSkill,
-    MessagePreviewSkill,
-)
+from skill_handlers import ExternalModelApiSkill, GeneralChatSkill, KnowledgeRagSkill
 from skill_router import SkillRouter
 from vector_store_manager import VectorStoreManager
 
@@ -77,6 +70,7 @@ def initialize_runtime() -> RuntimeResources:
     os.environ["OPENAI_BASE_URL"] = require_env("OPENAI_BASE_URL")
     embedding_model = create_embedding_model()
     llm = create_chat_model()
+    intent_llm = create_intent_model()
     external_search_client = create_external_search_client()
 
     vector_store_manager = VectorStoreManager(settings.vector_db_dir, embedding_model)
@@ -87,10 +81,10 @@ def initialize_runtime() -> RuntimeResources:
         settings.rag_score_threshold,
         settings.rag_top_k,
     )
-    intent_service = IntentRecognitionService(llm)
+    intent_service = IntentRecognitionService(intent_llm)
     dialogue_interpreter = DialogueCommandInterpreter(llm)
     skill_router = build_skill_router(rag_service, external_search_client, llm)
-    ai_chat_orchestrator = AiChatOrchestrator(intent_service, skill_router)
+    ai_chat_orchestrator = AiChatOrchestrator(intent_service, rag_service, external_search_client, llm)
     return RuntimeResources(
         settings=settings,
         embedding_model=embedding_model,
@@ -124,23 +118,26 @@ def create_chat_model():
     return ChatOpenAI(model=require_env("CHAT_MODEL"))
 
 
+def create_intent_model():
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(model=optional_env("INTENT_MODEL") or require_env("CHAT_MODEL"), temperature=0)
+
+
 def create_external_search_client():
     from external_search_client import ExternalSearchClient, ExternalSearchConfigError
 
     try:
         return ExternalSearchClient()
-    except ExternalSearchConfigError as exc:
+    except (ExternalSearchConfigError, RuntimeError) as exc:
         logger.warning("external search client disabled: %s", exc)
         return None
 
 
 def build_skill_router(rag_service, external_search_client, llm) -> SkillRouter:
-    java_client = JavaSkillClient()
     return SkillRouter({
         IntentType.KNOWLEDGE_QA: KnowledgeRagSkill(rag_service.query),
-        IntentType.CUSTOMER_AUM_QUERY: CustomerAumSkill(java_client),
         IntentType.EXTERNAL_API_QUERY: ExternalModelApiSkill(external_search_client, llm),
-        IntentType.MESSAGE_SEND: MessagePreviewSkill(java_client),
         IntentType.GENERAL_CHAT: GeneralChatSkill(llm),
     })
 

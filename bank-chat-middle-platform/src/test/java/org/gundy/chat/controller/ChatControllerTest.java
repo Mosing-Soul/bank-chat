@@ -79,7 +79,7 @@ class ChatControllerTest {
         response.setConfidence(0.96D);
         response.setAnswer("gold answer");
         when(aiChatService.invoke(eq("trace-1"), eq("s1"), eq("现在黄金价格是多少？"), anyList(),
-                isNull(), eq(false), isNull(), anyDouble(), any(), eq("NO_DETERMINISTIC_ROUTE"), any())).thenReturn(response);
+                isNull(), eq(false), isNull(), anyDouble(), any(), isNull(), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/chat")
                         .header("X-Trace-Id", "trace-1")
@@ -103,7 +103,7 @@ class ChatControllerTest {
         ChatResponse response = ChatResponse.friendlyError("", "s1", "ok");
         response.setAnswer("answer");
         when(aiChatService.invoke(anyString(), eq("s1"), eq("你好"), anyList(),
-                isNull(), eq(false), isNull(), anyDouble(), any(), eq("NO_DETERMINISTIC_ROUTE"), any())).thenReturn(response);
+                isNull(), eq(false), isNull(), anyDouble(), any(), isNull(), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/chat")
                         .contentType("application/json")
@@ -128,26 +128,21 @@ class ChatControllerTest {
                 isNull(), eq(false), isNull(), anyDouble(), any(), eq("NO_DETERMINISTIC_ROUTE"), any()))
                 .thenReturn(aiResponse);
 
-        ChatResponse clarification = new ChatResponse();
-        clarification.setIntent("CLARIFICATION");
-        clarification.setRequiresConfirmation(true);
-        clarification.setAnswer("已为您匹配到2个相关办理方向，请选择更符合您需求的一项继续。");
+        aiResponse.setRequiresConfirmation(true);
+        aiResponse.setAnswer("我理解到不止一种可能。请选择你希望我处理的方向。");
         Map<String, Object> confirmation = new LinkedHashMap<String, Object>();
-        confirmation.put("type", "INTENT_CLARIFICATION");
-        confirmation.put("originalMessage", "帮我查一下客户等级");
-        clarification.setConfirmation(confirmation);
-        when(intentClarificationService.maybeClarify(anyString(), eq("case-1"), eq("帮我查一下客户等级"),
-                eq(route), eq(false), eq(aiResponse))).thenReturn(clarification);
+        confirmation.put("type", "INTENT_SELECTION");
+        aiResponse.setConfirmation(confirmation);
+        when(aiChatService.invoke(anyString(), eq("case-1"), eq("帮我查一下客户等级"), anyList(),
+                isNull(), eq(false), isNull(), anyDouble(), any(), isNull(), any())).thenReturn(aiResponse);
 
         mockMvc.perform(post("/api/chat")
                         .contentType("application/json")
                         .content("{\"sessionId\":\"case-1\",\"message\":\"帮我查一下客户等级\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.intent", is("CLARIFICATION")))
+                .andExpect(jsonPath("$.intent", is("UNKNOWN")))
                 .andExpect(jsonPath("$.requiresConfirmation", is(true)))
-                .andExpect(jsonPath("$.answer", is("已为您匹配到2个相关办理方向，请选择更符合您需求的一项继续。")))
-                .andExpect(jsonPath("$.confirmation.type", is("INTENT_CLARIFICATION")))
-                .andExpect(jsonPath("$.confirmation.originalMessage", is("帮我查一下客户等级")));
+                .andExpect(jsonPath("$.confirmation.type", is("INTENT_SELECTION")));
     }
 
     @Test
@@ -157,7 +152,7 @@ class ChatControllerTest {
                 .thenReturn(SkillTransitionResult.notHandled());
         when(memoryService.getHistory("s1")).thenReturn(new ArrayList<HistoryMessage>());
         when(aiChatService.invoke(eq("trace-timeout"), eq("s1"), eq("你好"), anyList(),
-                isNull(), eq(false), isNull(), anyDouble(), any(), eq("NO_DETERMINISTIC_ROUTE"), any()))
+                isNull(), eq(false), isNull(), anyDouble(), any(), isNull(), any()))
                 .thenThrow(new ResourceAccessException("timeout"));
 
         mockMvc.perform(post("/api/chat")
@@ -195,7 +190,7 @@ class ChatControllerTest {
     }
 
     @Test
-    void routerForcesInstitutionKnowledgeQuestionToRag() throws Exception {
+    void ordinaryKnowledgeQuestionIsDelegatedToPythonModel() throws Exception {
         IntentRouteResult route = new IntentRouteResult();
         route.setRequestedSkill("RAG_QUERY");
         route.setForceSkill(true);
@@ -212,7 +207,7 @@ class ChatControllerTest {
         response.setIntent("KNOWLEDGE_QA");
         response.setAnswer("rag answer");
         when(aiChatService.invoke(eq("trace-rag"), eq("s1"), eq("招行的客户等级是怎么样的"),
-                eq(new ArrayList<HistoryMessage>()), eq("RAG_QUERY"), eq(true), eq("RAG_QUERY"), anyDouble(), any(), eq("ROUTER_SWITCH_INTENT"), any()))
+                eq(new ArrayList<HistoryMessage>()), isNull(), eq(false), isNull(), anyDouble(), any(), isNull(), any()))
                 .thenReturn(response);
 
         mockMvc.perform(post("/api/chat")

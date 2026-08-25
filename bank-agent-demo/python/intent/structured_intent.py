@@ -54,6 +54,34 @@ try:
 except Exception:
     PROMPT = None
 
+# Phase-1 conversational routing deliberately has only three executable routes.
+# AUM and message operations are not part of this pipeline; uncertain requests
+# go to GENERAL_CHAT so the answer model can respond normally.
+CONVERSATION_INTENT_PROMPT = """
+你是银行客户经理助手的轻量意图分类器。结合最近对话，判断当前用户问题需要哪些信息来源。
+只允许选择以下意图：
+- KNOWLEDGE_QA：银行内部制度、产品、客户分层标准、业务办理流程、SOP、合规要求等，需要查内部知识库。
+- EXTERNAL_API_QUERY：当前行情、新闻、天气、汇率、公开网络资料等，需要联网搜索。
+- GENERAL_CHAT：无需检索即可回答，或无法可靠判断时的兜底。
+
+可以同时选择 KNOWLEDGE_QA 和 EXTERNAL_API_QUERY；这表示答案需要同时综合内部文档和外部信息。
+只有当用户明确表达了多个互斥目标、必须让用户二选一时，才把 intent 设为 UNKNOWN，
+并把选项写入 candidateIntents。普通的模糊问题不要 UNKNOWN，使用 GENERAL_CHAT。
+selectedIntents 写入所有要执行的意图；intent 写主意图；rewrittenQuery 把指代结合上下文改写成独立可检索问题。
+不要因为出现“客户”“资产”“发送”等词识别成客户数据查询或消息操作，本阶段没有这些路由。
+reason 只写一句简短依据，不输出推理过程。
+"""
+
+try:
+    from langchain_core.prompts import ChatPromptTemplate
+
+    PROMPT = ChatPromptTemplate.from_messages([
+        ("system", CONVERSATION_INTENT_PROMPT),
+        ("human", "最近对话：\n{history}\n\n当前用户输入：{user_input}"),
+    ])
+except Exception:
+    PROMPT = None
+
 
 class IntentRecognitionService:
     def __init__(self, llm=None, threshold=None):
@@ -61,11 +89,15 @@ class IntentRecognitionService:
         self.threshold = float(threshold) if threshold is not None else env_float("INTENT_CONFIDENCE_THRESHOLD")
 
     def recognize(self, user_input: str, router_intent=None, router_confidence=None, entities=None,
-                  dialog_act=None, skill_examples=None) -> IntentResult:
+                  dialog_act=None, skill_examples=None, history=None) -> IntentResult:
         if not user_input or not user_input.strip():
             return self._unknown("empty input")
 
         router_context = build_router_context(router_intent, router_confidence, entities, dialog_act, skill_examples)
+        history_text = "\n".join(
+            f"{getattr(message, 'role', '')}: {getattr(message, 'content', '')}"
+            for message in (history or [])[-8:]
+        ) or "（无）"
         try:
             if self.llm is None or PROMPT is None:
                 result = fallback_intent(user_input, router_intent=router_intent,
@@ -73,33 +105,50 @@ class IntentRecognitionService:
                                          dialog_act=dialog_act, skill_examples=skill_examples)
             else:
                 chain = PROMPT | self.llm.with_structured_output(IntentResult)
-                result = chain.invoke({"user_input": user_input, "router_context": router_context})
+                result = chain.invoke({"user_input": user_input, "router_context": router_context,
+                                       "history": history_text})
                 if isinstance(result, dict):
                     result = IntentResult(**result)
         except Exception as exc:
-            return fallback_intent(user_input, reason=f"model unavailable: {type(exc).__name__}",
-                                   router_intent=router_intent, router_confidence=router_confidence,
-                                   router_entities=entities, dialog_act=dialog_act, skill_examples=skill_examples)
+            result = fallback_intent(user_input, reason=f"model unavailable: {type(exc).__name__}",
+                                     router_intent=router_intent, router_confidence=router_confidence,
+                                     router_entities=entities, dialog_act=dialog_act, skill_examples=skill_examples)
 
-        result = apply_router_prior(result, router_intent, router_confidence, entities, dialog_act)
-        result = apply_example_prior(result, user_input, entities, skill_examples)
+        if not result.selectedIntents:
+            result.selectedIntents = [result.intent]
+        allowed = {IntentType.KNOWLEDGE_QA, IntentType.EXTERNAL_API_QUERY, IntentType.GENERAL_CHAT, IntentType.UNKNOWN}
+        result.selectedIntents = [item for item in result.selectedIntents if item in allowed]
+        if result.intent not in allowed:
+            result.intent = IntentType.GENERAL_CHAT
+            result.selectedIntents = [IntentType.GENERAL_CHAT]
+            result.reason = "unsupported operation routed to conversational fallback"
+        result.rewrittenQuery = (result.rewrittenQuery or user_input).strip()
+
+        # Router metadata is intentionally ignored for normal typed input. A
+        # genuine page-button override is applied by AiChatOrchestrator only.
         local_result = fallback_intent(user_input, reason="local semantic fallback",
                                        router_intent=router_intent, router_confidence=router_confidence,
                                        router_entities=entities, dialog_act=dialog_act, skill_examples=skill_examples)
-        if result.intent == IntentType.UNKNOWN and local_result.intent != IntentType.UNKNOWN:
-            return local_result
+        if local_result.intent in (IntentType.CUSTOMER_AUM_QUERY, IntentType.MESSAGE_SEND, IntentType.UNKNOWN):
+            local_result.intent = IntentType.GENERAL_CHAT
+            local_result.selectedIntents = [IntentType.GENERAL_CHAT]
+            local_result.rewrittenQuery = user_input
+        if self.llm is None and result.intent in (IntentType.CUSTOMER_AUM_QUERY, IntentType.MESSAGE_SEND):
+            result.intent = IntentType.GENERAL_CHAT
+            result.selectedIntents = [IntentType.GENERAL_CHAT]
+            result.reason = "operation modules disabled; use conversational fallback"
 
         if result.confidence < self.threshold:
-            if local_result.intent != IntentType.UNKNOWN and local_result.confidence >= self.threshold:
+            if self.llm is None and local_result.confidence >= self.threshold:
                 return local_result
             return IntentResult(
-                intent=IntentType.UNKNOWN,
+                intent=IntentType.GENERAL_CHAT,
                 confidence=result.confidence,
                 entities=result.entities,
-                missingSlots=result.missingSlots,
-                candidateIntents=result.candidateIntents,
+                selectedIntents=[IntentType.GENERAL_CHAT],
+                rewrittenQuery=user_input,
                 ambiguities=result.ambiguities,
-                reason="confidence below threshold",
+                reason="low confidence routed to conversational fallback",
             )
         return result
 

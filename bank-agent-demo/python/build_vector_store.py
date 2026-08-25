@@ -145,6 +145,53 @@ def make_headers(row_values, previous_row=None):
     return headers
 
 
+def read_excel_sheets_with_vertical_merges(file_path):
+    """Read every sheet and carry vertically merged labels into their child rows.
+
+    Real bank workbooks commonly merge a business category down several rows. Pandas
+    keeps the value only in the first row, which makes later RAG chunks lose their
+    category. Horizontal merges are deliberately left untouched because they are
+    usually presentation-only grouped headers, not row data.
+    """
+    sheets = pd.read_excel(file_path, sheet_name=None, header=None, dtype=object)
+    try:
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(file_path, data_only=True, read_only=False)
+    except Exception:
+        return sheets
+
+    for sheet_name, df in sheets.items():
+        if sheet_name not in workbook.sheetnames or df is None or df.empty:
+            continue
+        worksheet = workbook[sheet_name]
+        for merged_range in worksheet.merged_cells.ranges:
+            if merged_range.min_col != merged_range.max_col or merged_range.min_row == merged_range.max_row:
+                continue
+            row_start = merged_range.min_row - 1
+            row_end = merged_range.max_row - 1
+            column = merged_range.min_col - 1
+            if row_start >= len(df.index) or column >= len(df.columns):
+                continue
+            value = worksheet.cell(merged_range.min_row, merged_range.min_col).value
+            if value is None:
+                continue
+            df.iloc[row_start:min(row_end + 1, len(df.index)), column] = value
+    workbook.close()
+    return sheets
+
+
+def looks_like_group_header_row(row_values, next_row_values):
+    """Recognize presentation-only grouped headers above a semantic leaf header."""
+    if not next_row_values or not looks_like_header_row(next_row_values):
+        return False
+    non_empty = [clean_cell(value) for value in row_values if not is_empty(value)]
+    if not non_empty or normalize_label(row_values[0]) in {"项目", "指标", "名称"}:
+        return False
+    # Merged group rows are sparse and contain broad labels such as 问题索引/办理要求.
+    return len(non_empty) <= max(2, len(row_values) // 2)
+
+
 def is_parent_row(row_values):
     """判断是否是父级标题行。
 
@@ -258,7 +305,7 @@ def parse_general_excel(file_path):
     try:
         # header=None 很关键：不要让 pandas 自动猜表头。
         # 自动猜表头容易把真正的“项目 | 1月 | 2月”跳过，导致列名退化。
-        sheets = pd.read_excel(file_path, sheet_name=None, header=None, dtype=object)
+        sheets = read_excel_sheets_with_vertical_merges(file_path)
     except Exception as exc:
         print(f"Pandas 加载失败: {file_path}, 错误: {exc}")
         return []
@@ -283,7 +330,8 @@ def parse_general_excel(file_path):
         headers = []
         previous_row = []
 
-        for row_idx, row in df.iterrows():
+        indexed_rows = list(df.iterrows())
+        for position, (row_idx, row) in enumerate(indexed_rows):
             row_values = [clean_cell(v) for v in row.tolist()]
             if not any(row_values):
                 previous_row = row_values
@@ -291,6 +339,9 @@ def parse_general_excel(file_path):
 
             first_value = row_values[0]
             non_empty_count = sum(1 for value in row_values if value)
+            next_row_values = []
+            if position + 1 < len(indexed_rows):
+                next_row_values = [clean_cell(v) for v in indexed_rows[position + 1][1].tolist()]
 
             # 只有一个非空单元格且还没有 title 时，通常是整张表标题。
             # 注意：后续同样只有第一列有值的行，不再当 title，而交给 parent 逻辑处理。
@@ -302,6 +353,13 @@ def parse_general_excel(file_path):
             # 单位行、注释行、时间行本身不生成 chunk。
             # 时间行保存在 previous_row 中，下一行如果是“项目 | 1月...”会用它补充表头上下文。
             if is_note_row(first_value) or is_unit_row(row_values) or is_time_row(row_values):
+                previous_row = row_values
+                continue
+
+            # Multi-level Excel headers often have a sparse merged grouping row
+            # immediately above the real field-name row. It is layout context, not
+            # a business fact, so do not create an extra vector chunk for it.
+            if looks_like_group_header_row(row_values, next_row_values):
                 previous_row = row_values
                 continue
 
@@ -510,8 +568,14 @@ def load_markdown(file_path):
     return docs
 
 def load_pdf(file_path):
-    loader = PyPDFLoader(file_path)
-    docs = loader.load()
+    try:
+        loader = PyPDFLoader(file_path)
+        docs = loader.load()
+    except ImportError as exc:
+        raise RuntimeError(
+            "PDF 解析依赖未安装。请在运行 RAG 服务的 Python 环境中执行 "
+            "`pip install -r requirements.txt`（至少需要 pypdf）。"
+        ) from exc
     for doc in docs:
         doc.metadata["source"] = os.path.basename(file_path)
         doc.metadata["type"] = "pdf"
@@ -563,7 +627,7 @@ def build_vector_store(
             print(f"  加载 {filename} 返回空，跳过")
             continue
         # 对 PDF/MD 切分，Excel 已经按行切分，不再切分
-        if filename.endswith(('.pdf', '.md')):
+        if filename.lower().endswith(('.pdf', '.md')):
             splitter = RecursiveCharacterTextSplitter(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,

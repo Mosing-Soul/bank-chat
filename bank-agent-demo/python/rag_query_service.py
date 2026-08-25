@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from typing import List
 
 from rag_models import QueryRequest, QueryResponse
@@ -6,6 +7,14 @@ from rag_models import QueryRequest, QueryResponse
 
 logger = logging.getLogger(__name__)
 NO_STORE_ANSWER = "【行内文档结论】暂无相关文档。\n\n【大模型补充】大模型暂不可用。\n\n【来源】无"
+
+
+@dataclass
+class RetrievalResult:
+    context: str
+    sources: List[str]
+    hit_count: int
+    candidates: str = ""
 
 
 def format_docs_for_prompt(docs_with_scores) -> str:
@@ -97,6 +106,23 @@ class RagService:
             "rag llm failed",
         )
         return QueryResponse(answer=answer, sources=sources)
+
+    def retrieve(self, question: str) -> RetrievalResult:
+        """Retrieve internal evidence without asking an LLM to compose an answer."""
+        vector_store = self._stores.get()
+        if vector_store is None:
+            return RetrievalResult(context="", sources=[], hit_count=0)
+        docs_with_scores = vector_store.similarity_search_with_score(question, k=self._top_k)
+        relevant_docs = [
+            (doc, score) for doc, score in docs_with_scores if score < self._score_threshold
+        ]
+        candidates = [] if relevant_docs else docs_with_scores[:3]
+        return RetrievalResult(
+            context=format_docs_for_prompt(relevant_docs),
+            sources=unique_sources(relevant_docs),
+            hit_count=len(relevant_docs),
+            candidates=format_docs_for_prompt(candidates),
+        )
 
     def evaluate(self, payload: QueryRequest) -> QueryResponse:
         vector_store = self._stores.get()

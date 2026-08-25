@@ -146,18 +146,14 @@ class AiChatTests(unittest.TestCase):
         self.assertEqual(result.intent, IntentType.MESSAGE_SEND)
         self.assertGreater(result.confidence, 0.90)
 
-    def test_low_confidence_becomes_unknown(self):
+    def test_low_confidence_uses_general_chat_fallback(self):
         result = IntentRecognitionService(llm=None, threshold=0.9).recognize("黄金现在多少钱")
-        self.assertEqual(result.intent, IntentType.UNKNOWN)
+        self.assertEqual(result.intent, IntentType.GENERAL_CHAT)
 
-    def test_low_confidence_unknown_keeps_clarification_candidates(self):
+    def test_ambiguous_low_confidence_uses_general_chat_fallback(self):
         result = IntentRecognitionService(llm=None, threshold=0.6).recognize("帮我查一下客户等级")
 
-        self.assertEqual(result.intent, IntentType.UNKNOWN)
-        self.assertEqual(
-            result.candidateIntents,
-            [IntentType.KNOWLEDGE_QA, IntentType.CUSTOMER_AUM_QUERY],
-        )
+        self.assertEqual(result.intent, IntentType.GENERAL_CHAT)
 
     def test_structured_output_failure_falls_back(self):
         class BrokenLlm:
@@ -165,7 +161,7 @@ class AiChatTests(unittest.TestCase):
                 raise RuntimeError("broken")
 
         result = IntentRecognitionService(llm=BrokenLlm()).recognize("查询客户张伟当前AUM")
-        self.assertEqual(result.intent, IntentType.CUSTOMER_AUM_QUERY)
+        self.assertEqual(result.intent, IntentType.GENERAL_CHAT)
 
     def test_model_unknown_uses_local_semantic_fallback(self):
         class UnknownLlm:
@@ -204,7 +200,7 @@ class AiChatTests(unittest.TestCase):
             dialog_act="ROUTER_SWITCH_INTENT",
         )
 
-        self.assertEqual(result.intent, IntentType.CUSTOMER_AUM_QUERY)
+        self.assertEqual(result.intent, IntentType.GENERAL_CHAT)
         self.assertEqual(result.entities.customerName, "张伟")
 
     def test_configured_examples_can_drive_intent(self):

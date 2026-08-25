@@ -77,12 +77,14 @@ class RagServiceCharacterizationTest(unittest.TestCase):
     @patch("rag_service.IntentRecognitionService")
     @patch("rag_service.VectorStoreManager")
     @patch("rag_service.create_external_search_client")
+    @patch("rag_service.create_intent_model")
     @patch("rag_service.create_chat_model")
     @patch("rag_service.create_embedding_model")
     def test_initialize_runtime_builds_one_dependency_graph(
         self,
         embedding_factory,
         chat_factory,
+        intent_model_factory,
         search_factory,
         manager_type,
         intent_type,
@@ -92,6 +94,7 @@ class RagServiceCharacterizationTest(unittest.TestCase):
     ):
         embedding_factory.return_value = "embedding"
         chat_factory.return_value = "llm"
+        intent_model_factory.return_value = "intent-llm"
         search_factory.return_value = "search"
         manager = manager_type.return_value
         manager.get.return_value = "store"
@@ -102,7 +105,8 @@ class RagServiceCharacterizationTest(unittest.TestCase):
         manager_type.assert_called_once_with(resources.settings.vector_db_dir, "embedding")
         manager.load.assert_called_once_with()
         router_builder.assert_called_once_with(resources.rag_service, "search", "llm")
-        orchestrator_type.assert_called_once_with(intent_type.return_value, "router")
+        intent_type.assert_called_once_with("intent-llm")
+        orchestrator_type.assert_called_once_with(intent_type.return_value, resources.rag_service, "search", "llm")
 
     def test_query_without_vector_store_uses_model_and_has_no_sources(self):
         fake_llm = FakeLlm("【行内文档结论】暂无相关文档。\n\n【来源】无")

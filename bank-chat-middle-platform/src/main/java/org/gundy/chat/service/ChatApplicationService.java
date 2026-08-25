@@ -51,23 +51,30 @@ public class ChatApplicationService {
         DialogueProgress.report("CONTEXT_READY", "已读取对话上下文", dialogState == null
                 ? "开始新的办理事项" : "继续当前办理事项");
 
-        SkillTransitionResult commandTransition = dialogueOrchestrationService.tryHandle(
-                traceId, sessionId, userMessage, dialogState, currentHistory,
-                request.getRequestedSkill(), request.forceSkill());
+        // Phase 1: ordinary typed messages always go to the Python LLM router.
+        // Legacy operation flows are reachable only through an explicit page action.
+        SkillTransitionResult commandTransition = request.forceSkill()
+                ? dialogueOrchestrationService.tryHandle(
+                    traceId, sessionId, userMessage, dialogState, currentHistory,
+                    request.getRequestedSkill(), true)
+                : SkillTransitionResult.notHandled();
         if (isHandled(commandTransition)) {
             return transitionResponse(traceId, sessionId, userMessage, commandTransition, start, "COMMAND_FLOW");
         }
 
-        IntentRouteResult route = intentRouterService.route(
-                dialogState, userMessage, request.getRequestedSkill(), request.forceSkill());
+        IntentRouteResult route = request.forceSkill()
+                ? intentRouterService.route(dialogState, userMessage, request.getRequestedSkill(), true)
+                : new IntentRouteResult();
         DialogueProgress.report("ROUTE_READY", "已匹配服务能力", hasText(route.getRequestedSkill())
                 ? "准备进入对应业务流程" : "准备生成回答");
-        String requestedSkill = hasText(route.getRequestedSkill())
-                ? route.getRequestedSkill() : request.getRequestedSkill();
-        boolean forceSkill = request.forceSkill() || route.isForceSkill();
+        String requestedSkill = request.forceSkill() && hasText(route.getRequestedSkill())
+                ? route.getRequestedSkill() : null;
+        boolean forceSkill = request.forceSkill() && route.isForceSkill();
 
-        SkillTransitionResult transition = dialogStateMachineService.handle(
-                traceId, sessionId, dialogState, userMessage, requestedSkill, forceSkill);
+        SkillTransitionResult transition = forceSkill
+                ? dialogStateMachineService.handle(
+                    traceId, sessionId, dialogState, userMessage, requestedSkill, true)
+                : SkillTransitionResult.notHandled();
         if (isHandled(transition)) {
             return transitionResponse(traceId, sessionId, userMessage, transition, start, "STATE_MACHINE");
         }

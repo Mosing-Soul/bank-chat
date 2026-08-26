@@ -39,6 +39,15 @@ export interface ExecutionTrace {
   retrieval?: RetrievalEvidence[];
   webResults?: WebEvidence[];
   citations?: Citation[];
+  metrics?: {
+    retrievedCount?: number;
+    acceptedCount?: number;
+    internalSourceCount?: number;
+    webResultCount?: number;
+    citationCount?: number;
+    bestSimilarity?: number | null;
+    averageSimilarity?: number | null;
+  };
   timing?: {
     totalMs?: number;
     stages?: SkillCall[];

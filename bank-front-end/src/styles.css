@@ -1546,6 +1546,36 @@ button.greeting-line {
 .trace-section-title .anticon { color: #2563eb; }
 .trace-section-title em { margin-left: auto; padding: 1px 7px; border-radius: 999px; background: #eff6ff; color: #2563eb; font-style: normal; }
 
+.trace-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.trace-metric-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 11px;
+  border: 1px solid rgba(59, 130, 246, 0.11);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(239, 246, 255, 0.9), rgba(248, 250, 252, 0.72));
+}
+
+.trace-metric-grid strong { color: #1d4ed8; font-size: 18px; line-height: 1.1; }
+.trace-metric-grid span { color: #64748b; font-size: 11px; }
+
+.trace-score-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.trace-score-summary strong { color: #334155; font-size: 11px; }
+
 .trace-route-card {
   margin-top: 9px;
   padding: 11px;
@@ -2034,6 +2064,58 @@ button.greeting-line {
 
 .markdown-content a:hover {
   text-decoration: underline;
+}
+
+.markdown-content a.internal-citation-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin: 0 2px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  vertical-align: super;
+}
+
+.message-internal-sources {
+  display: grid;
+  gap: 7px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 0 0 12px 12px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.35), rgba(239, 246, 255, 0.7));
+  color: #64748b;
+  font-size: 12px;
+}
+
+.message-source-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-weight: 700;
+}
+
+.message-internal-sources > div {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.message-internal-sources sup { color: #2563eb; font-weight: 700; }
+.message-internal-sources > div span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .markdown-content hr {

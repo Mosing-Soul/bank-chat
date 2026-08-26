@@ -28,7 +28,7 @@ import { App as AntApp, Button, Input, Slider, Switch, Tooltip } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
-import type { ChatMessage, ChatProgressEvent, ChatResponse, ExecutionTrace, SkillConfig, SkillExampleConfig } from './types/chat';
+import type { ChatMessage, ChatProgressEvent, ChatResponse, Citation, ExecutionTrace, SkillConfig, SkillExampleConfig } from './types/chat';
 import {
   createMessageId,
   getOrCreateSessionId,
@@ -394,7 +394,24 @@ function App() {
 
       stopThinking();
       abortControllerRef.current = null;
-      const executionTrace = response.data?.executionTrace as ExecutionTrace | undefined;
+      const responseCitations: Citation[] = response.citations?.length
+        ? response.citations
+        : (response.sources ?? []).map((source) => ({ source, title: source, type: 'INTERNAL' }));
+      response.citations = responseCitations;
+      const rawExecutionTrace = response.data?.executionTrace as ExecutionTrace | undefined;
+      const fallbackRoute = response.intent === 'KNOWLEDGE_QA'
+        ? 'RAG'
+        : response.intent === 'EXTERNAL_API_QUERY' ? 'WEB SEARCH' : response.intent ? 'LLM DIRECT' : undefined;
+      const executionTrace: ExecutionTrace | undefined = rawExecutionTrace
+        ? {
+          ...rawExecutionTrace,
+          citations: rawExecutionTrace.citations?.length ? rawExecutionTrace.citations : responseCitations,
+        }
+        : (fallbackRoute || responseCitations.length ? {
+          route: fallbackRoute,
+          query: content,
+          citations: responseCitations,
+        } : undefined);
       setRuntimeTrace((current) => ({
         ...current,
         status: response.error ? 'ERROR' : 'SUCCESS',
@@ -803,6 +820,7 @@ function RuntimeTraceSidebar({
   const retrieval = trace?.retrieval ?? [];
   const webResults = trace?.webResults ?? [];
   const citations = trace?.citations ?? state.response?.citations ?? [];
+  const metrics = trace?.metrics;
   const durationMs = trace?.timing?.totalMs ?? state.clientDurationMs;
   const route = trace?.route ?? (state.status === 'RUNNING' ? '正在判断路径' : '等待提问');
 
@@ -839,6 +857,24 @@ function RuntimeTraceSidebar({
             </div>
           ) : null}
         </section>
+
+        {metrics ? (
+          <section className="trace-section">
+            <div className="trace-section-title"><AppstoreOutlined /><span>检索指标</span></div>
+            <div className="trace-metric-grid">
+              <div><strong>{metrics.retrievedCount ?? 0}</strong><span>召回片段</span></div>
+              <div><strong>{metrics.acceptedCount ?? 0}</strong><span>阈值命中</span></div>
+              <div><strong>{metrics.internalSourceCount ?? 0}</strong><span>行内文件</span></div>
+              <div><strong>{metrics.webResultCount ?? 0}</strong><span>网页结果</span></div>
+            </div>
+            {(metrics.bestSimilarity != null || metrics.averageSimilarity != null) ? (
+              <div className="trace-score-summary">
+                <span>最高相似度 <strong>{metrics.bestSimilarity != null ? `${(metrics.bestSimilarity * 100).toFixed(1)}%` : '--'}</strong></span>
+                <span>平均相似度 <strong>{metrics.averageSimilarity != null ? `${(metrics.averageSimilarity * 100).toFixed(1)}%` : '--'}</strong></span>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="trace-section">
           <div className="trace-section-title"><SearchOutlined /><span>检索证据</span><em>{retrieval.length + webResults.length}</em></div>
@@ -1136,6 +1172,10 @@ function MessageBubble({
   onRevise: (content: string) => void;
 }) {
   const isUser = message.role === 'user';
+  const messageCitations: Citation[] = message.citations?.length
+    ? message.citations
+    : (message.sources ?? []).map((source) => ({ source, title: source, type: 'INTERNAL' }));
+  const internalCitations = messageCitations.filter((citation) => citation.type !== 'WEB' && !citation.url);
 
   return (
     <article className={`message-row ${isUser ? 'message-row-user' : 'message-row-assistant'}`}>
@@ -1152,13 +1192,23 @@ function MessageBubble({
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-                a: ({ node: _node, ...props }) => (
-                  <a {...props} target="_blank" rel="noreferrer noopener" />
-                ),
+                a: ({ node: _node, href, ...props }) => href?.startsWith('#internal-citation-')
+                  ? <a {...props} href={href} className="internal-citation-marker" />
+                  : <a {...props} href={href} target="_blank" rel="noreferrer noopener" />,
               }}
             >
               {message.content}
             </ReactMarkdown>
+            {internalCitations.length > 0 ? (
+              <footer className="message-internal-sources" aria-label="行内引用来源">
+                <span className="message-source-heading"><BankOutlined /> 引用来源</span>
+                {internalCitations.map((citation, index) => (
+                  <div id={`internal-citation-${index + 1}`} key={`${citation.source}-${index}`}>
+                    <sup>{index + 1}</sup><span title={citation.title ?? citation.source}>{citation.title ?? citation.source}</span>
+                  </div>
+                ))}
+              </footer>
+            ) : null}
           </div>
         )}
         {streaming ? <span className="stream-caret" /> : null}

@@ -95,8 +95,12 @@ class AiChatOrchestrator:
             calls.append(self._call("external-search", call_started, ok))
 
         answer_started = time.perf_counter()
-        answer = self._answer(payload, query, internal_context, external_context, current_date)
-        answer = self._append_internal_sources(answer, citations)
+        internal_sources = list(dict.fromkeys(
+            item.source for item in citations if item.type == "INTERNAL" and item.source
+        ))
+        answer = self._answer(
+            payload, query, internal_context, external_context, current_date, internal_sources
+        )
         calls.append(self._call("unified-answer-llm", answer_started, True))
         total_duration_ms = max(0, int((time.perf_counter() - started) * 1000))
         route = self._route_name(selected)
@@ -118,6 +122,7 @@ class AiChatOrchestrator:
                 "retrieval": retrieval_evidence,
                 "webResults": web_evidence,
                 "citations": [item.model_dump() for item in citations],
+                "metrics": self._trace_metrics(retrieval_evidence, web_evidence, citations),
                 "timing": {
                     "totalMs": total_duration_ms,
                     "stages": [item.model_dump() for item in calls],
@@ -131,14 +136,18 @@ class AiChatOrchestrator:
             sources=[item.source for item in citations], skillCalls=calls, error=error,
         )
 
-    def _answer(self, payload, query, internal_context, external_context, current_date):
+    def _answer(self, payload, query, internal_context, external_context, current_date, internal_sources):
         history = "\n".join(f"{item.role}: {item.content}" for item in payload.history[-8:]) or "（无）"
+        internal_reference_index = "\n".join(
+            f"[{index}] {source}" for index, source in enumerate(internal_sources, start=1)
+        ) or "无"
         prompt = f"""你是银行客户经理智能助手。请统一整理证据并直接回答用户，不要暴露路由或节点名。
 内部文档是行内依据；外部搜索是公开信息，涉及时间敏感内容要提示时效。证据不足时明确说明，禁止编造。
-若两类证据都有，综合回答并清楚区分内部规定与外部信息。回答简洁、自然，使用必要的 Markdown。
+若两类证据都有，应融合为一套连贯回答；不要使用“行内文档结论”“大模型补充”等标签切割回答。回答简洁、自然，使用必要的 Markdown。
 当前日期（北京时间）：{current_date}。不得把当前日期之后的内容描述成已经发生；搜索结果只有月日而没有年份时，不得擅自推断为今年。
 外部证据按 WEB 编号提供。引用外部事实时，必须紧跟一个可点击的 Markdown 链接，格式为 [↗](对应URL)；只能使用证据中真实出现的URL。
-不要在回答末尾另列外部来源清单。不要自行输出行内来源清单，系统会统一追加行内文件来源。
+引用内部事实时，必须在对应句子末尾添加来源角标，格式为 [数字](#internal-citation-数字)，数字必须来自下方“内部来源编号”。
+同一来源可重复使用同一个角标。不要在回答正文中写文件名，不要在回答末尾另列来源，页面会统一渲染来源区。
 
 最近对话：
 {history}
@@ -147,6 +156,9 @@ class AiChatOrchestrator:
 
 内部文档证据：
 {internal_context or '无'}
+
+内部来源编号：
+{internal_reference_index}
 
 外部搜索证据：
 {external_context or '无'}
@@ -161,14 +173,18 @@ class AiChatOrchestrator:
             return "当前大模型服务不可用，请稍后再试。"
 
     @staticmethod
-    def _append_internal_sources(answer, citations):
-        files = list(dict.fromkeys(
-            item.source for item in citations if item.type == "INTERNAL" and item.source
-        ))
-        if not files:
-            return answer
-        source_lines = "\n".join(f"- `{source}`" for source in files)
-        return f"{answer.rstrip()}\n\n---\n\n📚 **行内来源**\n\n{source_lines}"
+    def _trace_metrics(retrieval, web_results, citations):
+        accepted = [item for item in retrieval if item.get("accepted")]
+        similarities = [item.get("similarity") for item in accepted if item.get("similarity") is not None]
+        return {
+            "retrievedCount": len(retrieval),
+            "acceptedCount": len(accepted),
+            "internalSourceCount": len({item.get("source") for item in accepted if item.get("source")}),
+            "webResultCount": len(web_results),
+            "citationCount": len(citations),
+            "bestSimilarity": round(max(similarities), 4) if similarities else None,
+            "averageSimilarity": round(sum(similarities) / len(similarities), 4) if similarities else None,
+        }
 
     @staticmethod
     def _call(name, started, success):

@@ -49,12 +49,15 @@ class AiChatOrchestrator:
         citations = []
         calls = []
         errors = []
+        retrieval_evidence = []
+        web_evidence = []
 
         if IntentType.KNOWLEDGE_QA in selected:
             call_started = time.perf_counter()
             try:
                 retrieval = self._rag_service.retrieve(query)
                 internal_context = retrieval.context
+                retrieval_evidence = getattr(retrieval, "evidence", None) or []
                 citations = [Citation(source=source, title=source) for source in retrieval.sources]
             except Exception as exc:
                 errors.append(f"RAG_ERROR:{type(exc).__name__}")
@@ -69,6 +72,16 @@ class AiChatOrchestrator:
                 if hasattr(self._external_search, "search_with_sources"):
                     search_result = self._external_search.search_with_sources(dated_query)
                     external_context = search_result.context
+                    web_evidence = [
+                        {
+                            "rank": index,
+                            "title": source.title,
+                            "url": source.url,
+                            "snippet": source.snippet[:360],
+                            "date": source.date,
+                        }
+                        for index, source in enumerate(search_result.sources, start=1)
+                    ]
                     citations.extend(
                         Citation(source=source.url, title=source.title, type="WEB", url=source.url)
                         for source in search_result.sources
@@ -81,9 +94,12 @@ class AiChatOrchestrator:
                 ok = False
             calls.append(self._call("external-search", call_started, ok))
 
+        answer_started = time.perf_counter()
         answer = self._answer(payload, query, internal_context, external_context, current_date)
         answer = self._append_internal_sources(answer, citations)
-        calls.append(self._call("unified-answer-llm", started, True))
+        calls.append(self._call("unified-answer-llm", answer_started, True))
+        total_duration_ms = max(0, int((time.perf_counter() - started) * 1000))
+        route = self._route_name(selected)
         data = {
             "intentAnalysis": {
                 "selectedIntents": [item.value for item in selected],
@@ -95,6 +111,17 @@ class AiChatOrchestrator:
             "evidence": {
                 "internalContextUsed": bool(internal_context),
                 "externalContextUsed": bool(external_context),
+            },
+            "executionTrace": {
+                "route": route,
+                "query": query,
+                "retrieval": retrieval_evidence,
+                "webResults": web_evidence,
+                "citations": [item.model_dump() for item in citations],
+                "timing": {
+                    "totalMs": total_duration_ms,
+                    "stages": [item.model_dump() for item in calls],
+                },
             },
         }
         error = AiChatError(code="PARTIAL_EVIDENCE_ERROR", message="; ".join(errors)) if errors else None
@@ -147,6 +174,18 @@ class AiChatOrchestrator:
     def _call(name, started, success):
         return SkillCall(skill=name, status="SUCCESS" if success else "ERROR",
                          durationMs=max(0, int((time.perf_counter() - started) * 1000)))
+
+    @staticmethod
+    def _route_name(selected):
+        has_rag = IntentType.KNOWLEDGE_QA in selected
+        has_web = IntentType.EXTERNAL_API_QUERY in selected
+        if has_rag and has_web:
+            return "RAG + WEB"
+        if has_rag:
+            return "RAG"
+        if has_web:
+            return "WEB SEARCH"
+        return "LLM DIRECT"
 
     @staticmethod
     def _clarification(payload, intent, started):

@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import List
+from typing import Any, Dict, List
 
 from rag_models import QueryRequest, QueryResponse
 
@@ -15,6 +15,7 @@ class RetrievalResult:
     sources: List[str]
     hit_count: int
     candidates: str = ""
+    evidence: List[Dict[str, Any]] = None
 
 
 def format_docs_for_prompt(docs_with_scores) -> str:
@@ -111,17 +112,33 @@ class RagService:
         """Retrieve internal evidence without asking an LLM to compose an answer."""
         vector_store = self._stores.get()
         if vector_store is None:
-            return RetrievalResult(context="", sources=[], hit_count=0)
+            return RetrievalResult(context="", sources=[], hit_count=0, evidence=[])
         docs_with_scores = vector_store.similarity_search_with_score(question, k=self._top_k)
         relevant_docs = [
             (doc, score) for doc, score in docs_with_scores if score < self._score_threshold
         ]
         candidates = [] if relevant_docs else docs_with_scores[:3]
+        evidence = []
+        for rank, (doc, score) in enumerate(docs_with_scores, start=1):
+            metadata = doc.metadata or {}
+            distance = float(score)
+            evidence.append({
+                "rank": rank,
+                "source": metadata.get("source", "unknown"),
+                "snippet": " ".join(doc.page_content.split())[:360],
+                "distance": round(distance, 4),
+                "similarity": round(1.0 / (1.0 + max(0.0, distance)), 4),
+                "accepted": distance < self._score_threshold,
+                "page": metadata.get("page"),
+                "sheet": metadata.get("sheet"),
+                "rowIndex": metadata.get("row_index"),
+            })
         return RetrievalResult(
             context=format_docs_for_prompt(relevant_docs),
             sources=unique_sources(relevant_docs),
             hit_count=len(relevant_docs),
             candidates=format_docs_for_prompt(candidates),
+            evidence=evidence,
         )
 
     def evaluate(self, payload: QueryRequest) -> QueryResponse:

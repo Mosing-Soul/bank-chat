@@ -159,11 +159,6 @@ def rag_query(payload: QueryRequest, request: Request):
     return runtime.rag_service.query(payload.question, payload.session_id, payload.history)
 
 
-@app.post("/rag/eval_query", response_model=QueryResponse)
-def rag_eval_query(payload: QueryRequest, request: Request):
-    return runtime_from_request(request).rag_service.evaluate(payload)
-
-
 @app.post("/ai/chat/invoke", response_model=AiChatResponse)
 def ai_chat_invoke(payload: AiChatRequest, request: Request):
     return runtime_from_request(request).ai_chat_orchestrator.invoke(payload)

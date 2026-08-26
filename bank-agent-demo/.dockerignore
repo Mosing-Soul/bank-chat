@@ -1,10 +1,46 @@
+.git
+.gitignore
+.idea/
+.vscode/
+*.iml
+
+# Secrets and local configuration
 .env
 .env.*
 !.env.example
-.idea
-__pycache__
+
+# Python development artifacts
+__pycache__/
 *.py[cod]
-bank_vector_db
-python/chroma_db
-bank_docs
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local runtime state; Docker Compose supplies persistent volumes
+bank_vector_db/
+python/chroma_db/
+bank_docs/
+*.db
+*.sqlite3
+
+# Development-only material (defensive if reintroduced)
+python/eval/
+python/test_*.py
+tests/
+reports/
+
+# Logs and temporary output
 *.log
+logs/
+*.tmp
+*.bak
+request.json
+
+# Host-only packaging/editor files
+docker-compose*.yml
+README*.md

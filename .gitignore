@@ -23,6 +23,7 @@ logs/
 *.tmp
 *.bak
 request.json
+outputs/
 
 # Java / Maven
 target/
@@ -47,7 +48,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.tox/
+.nox/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 .mypy_cache/
@@ -72,6 +76,16 @@ bank-agent-demo/bank_vector_db/
 bank-agent-demo/python/chroma_db/
 bank-agent-demo/bank_docs/
 bank-agent-demo/request.json
+
+# Offline RAG lab outputs (keep evaluation code and datasets versioned)
+bank-agent-lab/reports/
+bank-agent-lab/document_generation/**/previews/
+bank-agent-lab/document_generation/**/pdf_previews/
+bank-agent-lab/document_generation/**/excel_previews/
+bank-agent-lab/document_generation/rag_excel_sample_v1/
+bank-agent-lab/document_generation/**/workbook_preview.pdf
+bank-agent-lab/document_generation/**/sop_sources/*.xlsx
+bank-agent-lab/document_generation/**/verification.json
 
 # Local-only project documents (secrets, real customer data, internal endpoints)
 docs/private/

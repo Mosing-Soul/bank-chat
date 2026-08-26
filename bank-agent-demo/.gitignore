@@ -1,4 +1,3 @@
-NEW_FILE_CODE
 # Python
 __pycache__/
 *.py[cod]
@@ -18,6 +17,9 @@ sdist/
 var/
 wheels/
 *.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
 .installed.cfg
 *.egg
 venv/
@@ -54,3 +56,4 @@ logs/
 # Temporary files
 *.tmp
 *.bak
+request.json

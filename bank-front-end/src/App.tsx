@@ -27,8 +27,9 @@ import {
 import { App as AntApp, Button, Input, Slider, Switch, Tooltip } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import logoUrl from '../asset/logo.jfif';
+import logoUrl from '../asset/logo-transparent.png';
 import xiaohuaUrl from '../asset/xiaohua-transparent.png';
+import avatarUrl from '../asset/avator.jfif';
 import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
 import type { ChatMessage, ChatProgressEvent, ChatResponse, Citation, ExecutionTrace, SkillConfig, SkillExampleConfig } from './types/chat';
 import {
@@ -703,7 +704,7 @@ function App() {
               onClick={() => setProfileOpen(true)}
             >
               <div className="user-avatar" aria-hidden="true">
-                <UserOutlined />
+                <img src={avatarUrl} alt="" />
               </div>
               <div className="user-profile-copy">
                 <strong>李敏</strong>

@@ -1260,7 +1260,7 @@ function MessageBubble({
       </div>
       {isUser ? (
         <div className="message-user-avatar" aria-hidden="true">
-          <UserOutlined />
+          <img src={avatarUrl} alt="" />
         </div>
       ) : null}
     </article>

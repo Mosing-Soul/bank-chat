@@ -3,6 +3,46 @@ export type ChatRole = 'user' | 'assistant';
 export interface Citation {
   source: string;
   title?: string;
+  type?: string;
+  url?: string;
+}
+
+export interface RetrievalEvidence {
+  rank: number;
+  source: string;
+  snippet: string;
+  distance?: number;
+  similarity?: number;
+  accepted?: boolean;
+  page?: number | string | null;
+  sheet?: string | null;
+  rowIndex?: number | null;
+}
+
+export interface WebEvidence {
+  rank: number;
+  title: string;
+  url: string;
+  snippet?: string;
+  date?: string;
+}
+
+export interface SkillCall {
+  skill: string;
+  status: string;
+  durationMs: number;
+}
+
+export interface ExecutionTrace {
+  route?: string;
+  query?: string;
+  retrieval?: RetrievalEvidence[];
+  webResults?: WebEvidence[];
+  citations?: Citation[];
+  timing?: {
+    totalMs?: number;
+    stages?: SkillCall[];
+  };
 }
 
 export interface ChatConfirmation {
@@ -56,6 +96,7 @@ export interface ChatResponse {
   data?: Record<string, unknown>;
   citations?: Citation[];
   sources?: string[];
+  skillCalls?: SkillCall[];
   requiresConfirmation?: boolean;
   confirmation?: ChatConfirmation | null;
   error?: {

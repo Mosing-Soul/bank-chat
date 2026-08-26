@@ -4,17 +4,21 @@ import {
   ArrowLeftOutlined,
   BankOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   ClearOutlined,
+  CloseOutlined,
   DeleteOutlined,
   DownOutlined,
   EditOutlined,
   GoldOutlined,
   IdcardOutlined,
   LoadingOutlined,
+  LinkOutlined,
   LogoutOutlined,
   PlusOutlined,
   ProductOutlined,
   SaveOutlined,
+  SearchOutlined,
   SendOutlined,
   SettingOutlined,
   StopOutlined,
@@ -24,7 +28,7 @@ import { App as AntApp, Button, Input, Slider, Switch, Tooltip } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
-import type { ChatMessage, ChatProgressEvent, SkillConfig, SkillExampleConfig } from './types/chat';
+import type { ChatMessage, ChatProgressEvent, ChatResponse, ExecutionTrace, SkillConfig, SkillExampleConfig } from './types/chat';
 import {
   createMessageId,
   getOrCreateSessionId,
@@ -50,6 +54,15 @@ interface GreetingConfig {
 }
 
 type WorkspaceMode = 'chat' | 'config';
+
+interface RuntimeTraceState {
+  status: 'IDLE' | 'RUNNING' | 'SUCCESS' | 'ERROR';
+  question?: string;
+  progress: ChatProgressEvent[];
+  trace?: ExecutionTrace;
+  response?: ChatResponse;
+  clientDurationMs?: number;
+}
 
 const iconByName = {
   gold: <GoldOutlined />,
@@ -145,6 +158,8 @@ function App() {
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ChatProgressEvent[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [runtimeTrace, setRuntimeTrace] = useState<RuntimeTraceState>({ status: 'IDLE', progress: [] });
+  const [tracePanelOpen, setTracePanelOpen] = useState(() => window.innerWidth >= 1320);
   const endRef = useRef<HTMLDivElement>(null);
   const messageScrollRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -152,6 +167,7 @@ function App() {
   const streamTimerRef = useRef<number | null>(null);
   const elapsedTimerRef = useRef<number | null>(null);
   const stopRequestedRef = useRef(false);
+  const requestStartedAtRef = useRef(0);
 
   const canSend = useMemo(() => question.trim().length > 0 && !isSending, [isSending, question]);
   const activeGreeting = greetings[greetingIndex];
@@ -252,6 +268,11 @@ function App() {
     clearAsyncTimers();
     setIsSending(false);
     setIsStreaming(false);
+    setRuntimeTrace((current) => ({
+      ...current,
+      status: 'ERROR',
+      clientDurationMs: Math.round(performance.now() - requestStartedAtRef.current),
+    }));
     setMessages((current) => {
       const lastMessage = current[current.length - 1];
       if (lastMessage?.role === 'assistant' && lastMessage.content) {
@@ -273,6 +294,7 @@ function App() {
   const startThinking = () => {
     setProgressSteps([]);
     setElapsedSeconds(0);
+    setRuntimeTrace({ status: 'IDLE', progress: [] });
     elapsedTimerRef.current = window.setInterval(() => {
       setElapsedSeconds((current) => current + 1);
     }, 1000);
@@ -333,6 +355,8 @@ function App() {
     setIsSending(true);
     setIsStreaming(false);
     stopRequestedRef.current = false;
+    requestStartedAtRef.current = performance.now();
+    setRuntimeTrace({ status: 'RUNNING', question: content, progress: [] });
     const requestController = new AbortController();
     abortControllerRef.current = requestController;
     startThinking();
@@ -350,6 +374,12 @@ function App() {
         },
         requestController.signal,
         (progress) => {
+          setRuntimeTrace((current) => ({
+            ...current,
+            progress: current.progress[current.progress.length - 1]?.code === progress.code
+              ? current.progress
+              : [...current.progress, progress].slice(-8),
+          }));
           setProgressSteps((current) => {
             if (current[current.length - 1]?.code === progress.code) {
               return current;
@@ -361,6 +391,14 @@ function App() {
 
       stopThinking();
       abortControllerRef.current = null;
+      const executionTrace = response.data?.executionTrace as ExecutionTrace | undefined;
+      setRuntimeTrace((current) => ({
+        ...current,
+        status: response.error ? 'ERROR' : 'SUCCESS',
+        trace: executionTrace,
+        response,
+        clientDurationMs: Math.round(performance.now() - requestStartedAtRef.current),
+      }));
 
       if (response.sessionId && response.sessionId !== sessionId) {
         saveSessionId(response.sessionId);
@@ -386,6 +424,11 @@ function App() {
     } catch (error) {
       stopThinking();
       abortControllerRef.current = null;
+      setRuntimeTrace((current) => ({
+        ...current,
+        status: 'ERROR',
+        clientDurationMs: Math.round(performance.now() - requestStartedAtRef.current),
+      }));
       if (stopRequestedRef.current) {
         stopRequestedRef.current = false;
         return;
@@ -732,7 +775,119 @@ function App() {
           </Tooltip>
         </form>
       </footer>
+      <RuntimeTraceSidebar
+        state={runtimeTrace}
+        elapsedSeconds={elapsedSeconds}
+        open={tracePanelOpen}
+        onToggle={() => setTracePanelOpen((current) => !current)}
+      />
     </main>
+  );
+}
+
+function RuntimeTraceSidebar({
+  state,
+  elapsedSeconds,
+  open,
+  onToggle,
+}: {
+  state: RuntimeTraceState;
+  elapsedSeconds: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const trace = state.trace;
+  const retrieval = trace?.retrieval ?? [];
+  const webResults = trace?.webResults ?? [];
+  const citations = trace?.citations ?? state.response?.citations ?? [];
+  const durationMs = trace?.timing?.totalMs ?? state.clientDurationMs;
+  const route = trace?.route ?? (state.status === 'RUNNING' ? '正在判断路径' : '等待提问');
+
+  return (
+    <>
+      <button className={`trace-rail-button ${open ? 'trace-rail-button-open' : ''}`} type="button" onClick={onToggle}>
+        <SearchOutlined />
+        <span>运行追踪</span>
+      </button>
+      <aside className={`runtime-sidebar ${open ? 'runtime-sidebar-open' : ''}`} aria-label="本次运行追踪">
+        <div className="runtime-sidebar-head">
+          <div>
+            <span className="trace-eyebrow">LIVE EXECUTION</span>
+            <h2>本次运行追踪</h2>
+          </div>
+          <button type="button" onClick={onToggle} aria-label="收起运行追踪"><CloseOutlined /></button>
+        </div>
+
+        <div className={`trace-status trace-status-${state.status.toLowerCase()}`}>
+          <span className="trace-status-dot" />
+          <strong>{state.status === 'RUNNING' ? '运行中' : state.status === 'SUCCESS' ? '已完成' : state.status === 'ERROR' ? '已中止' : '等待请求'}</strong>
+          <em>{state.status === 'RUNNING' ? `${elapsedSeconds}s` : durationMs != null ? `${(durationMs / 1000).toFixed(2)}s` : '--'}</em>
+        </div>
+
+        <section className="trace-section">
+          <div className="trace-section-title"><SearchOutlined /><span>执行路径</span></div>
+          <div className="trace-route-card">
+            <span className={`trace-route-badge trace-route-${route.toLowerCase().split(' ').join('-').replace('+', 'combined')}`}>{route}</span>
+            <p title={trace?.query ?? state.question}>{trace?.query ?? state.question ?? '发送问题后展示系统选择的处理路径'}</p>
+          </div>
+          {state.progress.length > 0 ? (
+            <div className="trace-progress-list">
+              {state.progress.map((step, index) => <span key={`${step.code}-${index}`} className={index === state.progress.length - 1 && state.status === 'RUNNING' ? 'active' : ''}>{step.title}</span>)}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="trace-section">
+          <div className="trace-section-title"><SearchOutlined /><span>检索证据</span><em>{retrieval.length + webResults.length}</em></div>
+          <div className="trace-evidence-list">
+            {retrieval.map((item) => (
+              <article className={`trace-evidence-card ${item.accepted ? '' : 'trace-evidence-muted'}`} key={`rag-${item.rank}-${item.source}`}>
+                <div className="trace-evidence-meta">
+                  <span>RAG · #{item.rank}</span>
+                  {item.similarity != null ? <strong>{(item.similarity * 100).toFixed(1)}%</strong> : null}
+                </div>
+                <h3 title={item.source}>{item.source}</h3>
+                <p title={item.snippet}>{item.snippet}</p>
+                <footer>
+                  <span>{item.sheet ? `Sheet: ${item.sheet}` : item.page != null ? `Page ${item.page}` : '向量检索'}</span>
+                  {item.distance != null ? <span title="向量距离，越低越相关">distance {item.distance.toFixed(3)}</span> : null}
+                </footer>
+              </article>
+            ))}
+            {webResults.map((item) => (
+              <article className="trace-evidence-card trace-web-card" key={`web-${item.rank}-${item.url}`}>
+                <div className="trace-evidence-meta"><span>WEB · #{item.rank}</span><strong>公开来源</strong></div>
+                <h3 title={item.title}>{item.title}</h3>
+                <p title={item.snippet}>{item.snippet || item.url}</p>
+              </article>
+            ))}
+            {retrieval.length === 0 && webResults.length === 0 ? <div className="trace-empty">运行完成后展示命中文档与摘要片段</div> : null}
+          </div>
+        </section>
+
+        <section className="trace-section">
+          <div className="trace-section-title"><LinkOutlined /><span>最终引用</span><em>{citations.length}</em></div>
+          <div className="trace-citation-list">
+            {citations.map((item, index) => item.url ? (
+              <a href={item.url} target="_blank" rel="noreferrer noopener" key={`${item.source}-${index}`} title={item.title ?? item.source}>
+                <LinkOutlined /><span>{item.title ?? item.source}</span>
+              </a>
+            ) : (
+              <div key={`${item.source}-${index}`} title={item.title ?? item.source}><span className="trace-file-icon">DOC</span><span>{item.title ?? item.source}</span></div>
+            ))}
+            {citations.length === 0 ? <div className="trace-empty">暂无最终引用</div> : null}
+          </div>
+        </section>
+
+        <section className="trace-section trace-timing-section">
+          <div className="trace-section-title"><ClockCircleOutlined /><span>阶段耗时</span></div>
+          {(trace?.timing?.stages ?? state.response?.skillCalls ?? []).map((stage) => (
+            <div className="trace-timing-row" key={stage.skill}><span>{stage.skill}</span><strong>{stage.durationMs} ms</strong></div>
+          ))}
+          <div className="trace-timing-total"><span>请求总耗时</span><strong>{durationMs != null ? `${durationMs} ms` : state.status === 'RUNNING' ? `${elapsedSeconds * 1000}+ ms` : '--'}</strong></div>
+        </section>
+      </aside>
+    </>
   );
 }
 

@@ -1218,6 +1218,7 @@ function MessageBubble({
         : marker;
     })
     : message.content;
+  const executionTrace = message.data?.executionTrace as ExecutionTrace | undefined;
 
   return (
     <article className={`message-row ${isUser ? 'message-row-user' : 'message-row-assistant'}`}>
@@ -1231,6 +1232,7 @@ function MessageBubble({
           message.content
         ) : (
           <div className="markdown-content">
+            {executionTrace ? <CompletedProcessSummary trace={executionTrace} expanded={Boolean(streaming)} /> : null}
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -1264,6 +1266,44 @@ function MessageBubble({
         </div>
       ) : null}
     </article>
+  );
+}
+
+const progressCopy: Record<string, { title: string; detail: string }> = {
+  REQUEST_RECEIVED: { title: '已接收问题', detail: '请求已进入对话处理流程' },
+  CONTEXT_READY: { title: '已读取最近对话', detail: '正在结合当前会话理解您的问题' },
+  ROUTE_READY: { title: '正在分析问题', detail: '正在判断适合的处理方式' },
+  RESPONSE_GENERATION: { title: '正在检索信息并组织回答', detail: '正在整理可核验的信息' },
+};
+
+function CompletedProcessSummary({ trace, expanded }: { trace: ExecutionTrace; expanded: boolean }) {
+  const evidenceStep = trace.route === 'RAG + WEB'
+    ? '已综合行内知识与公开信息'
+    : trace.route === 'RAG'
+      ? '已参考行内知识'
+      : trace.route === 'WEB SEARCH' ? '已查询公开信息' : '已完成问题分析';
+  const content = (
+    <div className="process-summary-body">
+      <span><CheckCircleOutlined /> 已读取对话上下文</span>
+      <span><CheckCircleOutlined /> 已完成问题分析</span>
+      <span><CheckCircleOutlined /> {evidenceStep}</span>
+      <span><CheckCircleOutlined /> 已整理并生成回答</span>
+    </div>
+  );
+
+  if (expanded) {
+    return (
+      <div className="process-summary process-summary-expanded">
+        <div className="process-summary-title"><LoadingOutlined /> 正在生成回答</div>
+        {content}
+      </div>
+    );
+  }
+  return (
+    <details className="process-summary">
+      <summary><CheckCircleOutlined /> 已完成处理</summary>
+      {content}
+    </details>
   );
 }
 
@@ -1326,6 +1366,7 @@ function ConfirmationCard({
 
 function ThinkingBubble({ steps, elapsedSeconds }: { steps: ChatProgressEvent[]; elapsedSeconds: number }) {
   const current = steps[steps.length - 1];
+  const currentCopy = current ? progressCopy[current.code] : undefined;
   return (
     <article className="message-row message-row-assistant">
       <div className="assistant-avatar" aria-hidden="true">
@@ -1334,20 +1375,20 @@ function ThinkingBubble({ steps, elapsedSeconds }: { steps: ChatProgressEvent[];
       <div className="thinking-card">
         <div className="thinking-head">
           <LoadingOutlined />
-          <span>正在办理</span>
+          <span>正在处理</span>
           <em>{elapsedSeconds}s</em>
         </div>
-        <div className="thinking-stage">{current?.title || '正在连接业务服务'}</div>
-        {current?.detail ? <div className="thinking-detail">{current.detail}</div> : null}
-        <div className="thinking-steps">
+        <div className="thinking-stage">{currentCopy?.title || '正在连接服务'}</div>
+        <div className="thinking-detail">{currentCopy?.detail || '正在准备本次回答'}</div>
+        <div className="thinking-timeline">
           {steps.map((step, index) => (
             <span
               key={`${step.code}-${index}`}
               className={
-                index < steps.length - 1 ? 'thinking-step thinking-step-done' : 'thinking-step thinking-step-active'
+                index < steps.length - 1 ? 'thinking-timeline-step thinking-timeline-done' : 'thinking-timeline-step active'
               }
             >
-              {step.title}
+              {progressCopy[step.code]?.title || step.title}
             </span>
           ))}
         </div>

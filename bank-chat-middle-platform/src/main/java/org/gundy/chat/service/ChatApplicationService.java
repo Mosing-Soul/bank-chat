@@ -48,8 +48,8 @@ public class ChatApplicationService {
         long start = System.currentTimeMillis();
         DialogState dialogState = dialogStateService.getState(sessionId);
         List<HistoryMessage> currentHistory = memoryService.getHistory(sessionId);
-        DialogueProgress.report("CONTEXT_READY", "已读取对话上下文", dialogState == null
-                ? "开始新的办理事项" : "继续当前办理事项");
+        DialogueProgress.report("CONTEXT_READY", "已读取最近对话", dialogState == null
+                ? "正在理解本次问题" : "正在结合当前会话理解问题");
 
         // Phase 1: ordinary typed messages always go to the Python LLM router.
         // Legacy operation flows are reachable only through an explicit page action.
@@ -66,8 +66,7 @@ public class ChatApplicationService {
         IntentRouteResult route = request.forceSkill()
                 ? intentRouterService.route(dialogState, userMessage, request.getRequestedSkill(), true)
                 : new IntentRouteResult();
-        DialogueProgress.report("ROUTE_READY", "已匹配服务能力", hasText(route.getRequestedSkill())
-                ? "准备进入对应业务流程" : "准备生成回答");
+        DialogueProgress.report("ROUTE_READY", "正在分析问题", "正在判断适合的处理方式");
         String requestedSkill = request.forceSkill() && hasText(route.getRequestedSkill())
                 ? route.getRequestedSkill() : null;
         boolean forceSkill = request.forceSkill() && route.isForceSkill();
@@ -86,7 +85,7 @@ public class ChatApplicationService {
         }
         List<HistoryMessage> history = clearState
                 ? Collections.<HistoryMessage>emptyList() : currentHistory;
-        DialogueProgress.report("RESPONSE_GENERATION", "正在整理查询结果", "生成清晰、可核验的答复");
+        DialogueProgress.report("RESPONSE_GENERATION", "正在检索信息并组织回答", "正在整理可核验的信息");
         ChatResponse response = aiChatService.invoke(
                 traceId, sessionId, userMessage, history, requestedSkill, forceSkill,
                 route.getRequestedSkill(), route.getConfidence(), route.entityMap(), route.getDialogAct(),

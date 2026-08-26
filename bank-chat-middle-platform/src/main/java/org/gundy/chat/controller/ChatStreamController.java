@@ -32,7 +32,7 @@ public class ChatStreamController {
         CompletableFuture.runAsync(() -> {
             DialogueProgress.install(event -> send(emitter, "progress", event));
             try {
-                DialogueProgress.report("REQUEST_RECEIVED", "正在处理您的请求", "已安全接收本次对话");
+                DialogueProgress.report("REQUEST_RECEIVED", "已接收问题", "请求已进入对话处理流程");
                 ResponseEntity<ChatResponse> response = chatController.chat(request, traceId);
                 send(emitter, "result", response.getBody());
                 emitter.complete();

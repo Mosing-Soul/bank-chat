@@ -1807,6 +1807,84 @@ button.greeting-line {
   color: var(--brand-dark);
 }
 
+.thinking-timeline {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.thinking-timeline-step {
+  position: relative;
+  padding-left: 18px;
+  color: #7b8490;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.thinking-timeline-step::before {
+  position: absolute;
+  top: 0.45em;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #aab2bc;
+  content: '';
+}
+
+.thinking-timeline-step.active { color: var(--brand-dark); font-weight: 600; }
+.thinking-timeline-step.active::before {
+  background: var(--brand);
+  box-shadow: 0 0 0 4px rgba(11, 99, 138, 0.1);
+  animation: typing-dot 1s ease-in-out infinite;
+}
+
+.thinking-timeline-done::before { background: #5c9a78; }
+
+.process-summary {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border: 1px solid rgba(124, 112, 83, 0.12);
+  border-radius: 12px;
+  background: rgba(241, 240, 236, 0.74);
+  color: #737b85;
+  font-size: 12px;
+}
+
+.process-summary summary,
+.process-summary-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #69727d;
+  font-weight: 600;
+}
+
+.process-summary summary { cursor: pointer; list-style: none; }
+.process-summary summary::-webkit-details-marker { display: none; }
+.process-summary summary::after {
+  margin-left: auto;
+  color: #9aa1aa;
+  content: '展开';
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.process-summary[open] summary::after { content: '收起'; }
+.process-summary-expanded { background: rgba(241, 240, 236, 0.58); }
+.process-summary-expanded .process-summary-title .anticon { color: var(--brand); }
+
+.process-summary-body {
+  display: grid;
+  gap: 6px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(124, 112, 83, 0.1);
+}
+
+.process-summary-body span { display: flex; align-items: center; gap: 7px; }
+.process-summary-body .anticon { color: #629074; font-size: 11px; }
+
 .assistant-avatar img {
   display: block;
   width: 100%;

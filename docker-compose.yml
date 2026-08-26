@@ -21,7 +21,7 @@ x-python-environment: &python-environment
   BUILD_VECTOR_DB_DIR: /app/chroma_db
   EMBEDDING_DEVICE: cpu
   EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-false}
-  JAVA_SKILL_BASE_URL: http://java-backend:8080/internal/skills
+  JAVA_SKILL_BASE_URL: http://java-backend:9091/internal/skills
 
 x-python-volumes: &python-volumes
   - ./bank-agent-demo/assets:/app/assets:ro
@@ -94,6 +94,8 @@ services:
       SKILL_CONFIG_SQLITE_PATH: /app/data/bank-chat-skill-config.db
     volumes:
       - java-data:/app/data
+    ports:
+      - "${JAVA_BACKEND_PORT:-9091}:9091"
     depends_on:
       redis:
         condition: service_healthy

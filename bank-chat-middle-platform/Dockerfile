@@ -17,5 +17,8 @@ USER spring:spring
 # 从构建阶段复制 JAR 文件
 COPY --from=builder /app/target/*.jar app.jar
 
+# 暴露应用端口（与 application.yml 中 SERVER_PORT 默认值一致）
+EXPOSE 9091
+
 # 启动应用（JVM 参数适配容器环境）
 ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]

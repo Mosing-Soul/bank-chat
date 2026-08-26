@@ -30,7 +30,7 @@ if prompt := st.chat_input("请问您想了解什么？"):
         with st.spinner("思考中..."):
             try:
                 response = requests.post(
-                    "http://java-backend:8080/api/chat",
+                    "http://java-backend:9091/api/chat",
                     json={
                         "question": prompt,
                         "sessionId": st.session_state.session_id   # 使用存储的 sessionId

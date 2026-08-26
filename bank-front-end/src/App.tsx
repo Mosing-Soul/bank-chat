@@ -28,6 +28,7 @@ import { App as AntApp, Button, Input, Slider, Switch, Tooltip } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import logoUrl from '../asset/logo.jfif';
+import xiaohuaUrl from '../asset/xiaohua-transparent.png';
 import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
 import type { ChatMessage, ChatProgressEvent, ChatResponse, Citation, ExecutionTrace, SkillConfig, SkillExampleConfig } from './types/chat';
 import {
@@ -738,13 +739,12 @@ function App() {
           {messages.length === 0 ? (
             <div className="empty-state">
               <div className="empty-card">
-                <div className="welcome-art" aria-hidden="true">
-                  <span className="art-bubble art-bubble-main" />
-                  <span className="art-bubble art-bubble-side" />
-                  <span className="art-emoji">👋💬</span>
+                <img className="empty-mascot" src={xiaohuaUrl} alt="华辰银行智能助手小华" />
+                <div className="empty-welcome-copy">
+                  <p className="empty-title">您好，我是华辰智能助手「小华」</p>
+                  <p className="empty-copy">欢迎回来！我可以帮您查询行内业务知识、办理流程和材料要求，也可以联网检索最新公开信息。</p>
+                  <p className="empty-hint">试试下方快捷问题，或直接在输入框告诉我您想了解什么。</p>
                 </div>
-                <p className="empty-title">欢迎回来！试试下方快捷问题或直接输入。</p>
-                <p className="empty-copy">我可以帮您查询行内业务知识、办理流程和材料要求，也可以联网检索最新公开信息。</p>
               </div>
             </div>
           ) : (
@@ -1222,7 +1222,7 @@ function MessageBubble({
     <article className={`message-row ${isUser ? 'message-row-user' : 'message-row-assistant'}`}>
       {!isUser ? (
         <div className="assistant-avatar" aria-hidden="true">
-          <BankOutlined />
+          <img src={xiaohuaUrl} alt="" />
         </div>
       ) : null}
       <div className="message-bubble">
@@ -1328,7 +1328,7 @@ function ThinkingBubble({ steps, elapsedSeconds }: { steps: ChatProgressEvent[];
   return (
     <article className="message-row message-row-assistant">
       <div className="assistant-avatar" aria-hidden="true">
-        <BankOutlined />
+        <img src={xiaohuaUrl} alt="" />
       </div>
       <div className="thinking-card">
         <div className="thinking-head">

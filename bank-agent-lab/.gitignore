@@ -1,0 +1,9 @@
+reports/
+__pycache__/
+*.pyc
+.pytest_cache/
+document_generation/**/previews/
+document_generation/**/pdf_previews/
+document_generation/**/excel_previews/
+node_modules/
+

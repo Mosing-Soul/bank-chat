@@ -74,38 +74,51 @@ const iconFor = (name?: string) => iconByName[(name || 'bank') as keyof typeof i
 
 const defaultQuickQuestions: QuickQuestion[] = [
   {
-    icon: <GoldOutlined />,
-    label: '黄金价格',
-    value: '黄金价格',
-    requestedSkill: 'GOLD_PRICE',
+    icon: <BankOutlined />,
+    label: '白金资产门槛',
+    value: '白金级客户的资产门槛是多少？',
+    requestedSkill: 'RAG_QUERY',
     forceWhenClicked: true,
   },
   {
     icon: <ProductOutlined />,
-    label: '反洗钱临时冻结时限',
-    value: '反洗钱法中，临时冻结的最长时限是48小时吗？',
+    label: '被骗转账处置',
+    value: '客户被骗转账后第一步做什么？',
     requestedSkill: 'RAG_QUERY',
     forceWhenClicked: true,
   },
 ];
 
-const placeholders = ['例如：白金级客户的资产门槛是多少？', '黄金价格是多少？', '消费贷款办理需要哪些材料？'];
+const placeholders = [
+  '例如：消费贷款需要什么用途材料？',
+  '例如：家属可以查询客户余额吗？',
+  '例如：贷款用途材料疑似伪造怎么办？',
+];
 
 const defaultGreetings: GreetingConfig[] = [
   {
-    text: '黄金价格波动较快，可随时查询当前参考价。',
-    prompt: '黄金价格是多少？',
-    skill: '市场价格查询',
-    requestedSkill: 'GOLD_PRICE',
-  },
-  {
-    text: '遇到反洗钱业务疑问时，可查询法规中的临时冻结时限。',
-    prompt: '反洗钱法中，临时冻结的最长时限是48小时吗？',
-    skill: '法规问答',
+    text: '欢迎回来！您可以咨询客户分层与权益，例如“白金级客户的资产门槛是多少？”、“夫妻资产能合并计算等级吗？”，我会基于行内知识库给出口径。',
+    prompt: '白金级客户的资产门槛是多少？',
+    skill: '客户分层问答',
     requestedSkill: 'RAG_QUERY',
   },
   {
-    text: '欢迎回来，您可以直接输入客户、产品或业务问题。',
+    text: '遇到贷款业务疑问时，可以问我“消费贷款需要什么用途材料？”、“审批通过后为什么还没放款？”，办理流程和补件要求都能快速查到。',
+    prompt: '消费贷款需要什么用途材料？',
+    skill: '贷款业务问答',
+    requestedSkill: 'RAG_QUERY',
+  },
+  {
+    text: '涉及反欺诈与应急处置时，试试“客户被骗转账后第一步做什么？”、“账户突然不能转账怎么办？”，帮您快速定位处置动作。',
+    prompt: '客户被骗转账后第一步做什么？',
+    skill: '反欺诈问答',
+    requestedSkill: 'RAG_QUERY',
+  },
+  {
+    text: '合规与信息保护问题也可以直接问，例如“家属可以查询客户余额吗？”、“客户贷款用途材料疑似伪造怎么办？”。',
+    prompt: '家属可以查询客户余额吗？',
+    skill: '合规问答',
+    requestedSkill: 'RAG_QUERY',
   },
 ];
 

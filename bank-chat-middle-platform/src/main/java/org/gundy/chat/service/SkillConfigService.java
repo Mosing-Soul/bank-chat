@@ -391,19 +391,30 @@ public class SkillConfigService {
         SkillConfig gold = new SkillConfig("GOLD_PRICE", "市场价格查询",
                 "查询黄金、金价、Au9999等外部实时行情。", true, true, true, 70,
                 "查询黄金或贵金属实时行情价格。");
-        gold.getExamples().add(example("ex-gold-1", "GOLD_PRICE", "黄金价格是多少", "黄金价格", "gold", 0.92D, true, true, false, true, 20));
-        gold.getExamples().add(example("ex-gold-2", "GOLD_PRICE", "现在金价多少", "查询当前金价", "gold", 0.9D, true, false, true, true, 21));
+        gold.getExamples().add(example("ex-gold-1", "GOLD_PRICE", "黄金价格是多少", "黄金价格", "gold", 0.92D, true, false, false, true, 20));
+        gold.getExamples().add(example("ex-gold-2", "GOLD_PRICE", "现在金价多少", "查询当前金价", "gold", 0.9D, true, false, false, true, 21));
         gold.getExamples().add(example("ex-gold-3", "GOLD_PRICE", "Au9999现在多少钱", "查询Au9999行情", "gold", 0.88D, false, false, false, true, 22));
 
         SkillConfig rag = new SkillConfig("RAG_QUERY", "行内知识问答",
-                "查询行内制度、客户等级规则、反洗钱法规、监管材料等知识。", true, true, true, 75,
+                "查询行内客户分层、贷款办理、理财适当性、反欺诈与信息保护等知识。", true, true, true, 75,
                 "查询行内规则、制度、产品说明或文档内容。");
         rag.getExamples().add(example("ex-rag-1", "RAG_QUERY",
-                "反洗钱法中，临时冻结的最长时限是48小时吗？", "反洗钱临时冻结时限",
-                "product", 0.92D, true, true, false, true, 40));
-        rag.getExamples().add(example("ex-rag-2", "RAG_QUERY", "招行的客户等级是怎么样的", "查询客户等级规则", "product", 0.91D, true, false, true, true, 41));
-        rag.getExamples().add(example("ex-rag-3", "RAG_QUERY", "客户等级规则是什么", "客户等级规则", "product", 0.88D, false, false, false, true, 42));
-        rag.getExamples().add(example("ex-rag-4", "RAG_QUERY", "客户等级是怎么划分的", "客户等级划分", "product", 0.86D, false, false, false, true, 43));
+                "白金级客户的资产门槛是多少？", "白金资产门槛",
+                "bank", 0.92D, true, true, false, true, 40));
+        rag.getExamples().add(example("ex-rag-2", "RAG_QUERY",
+                "消费贷款需要什么用途材料？",
+                "遇到贷款业务疑问时，可以问我“消费贷款需要什么用途材料？”、“审批通过后为什么还没放款？”，办理流程和补件要求都能快速查到。",
+                "product", 0.91D, true, false, true, true, 41));
+        rag.getExamples().add(example("ex-rag-3", "RAG_QUERY",
+                "客户被骗转账后第一步做什么？", "被骗转账处置",
+                "product", 0.9D, true, true, false, true, 42));
+        rag.getExamples().add(example("ex-rag-4", "RAG_QUERY",
+                "客户被骗转账后第一步做什么？",
+                "涉及反欺诈与应急处置时，试试“客户被骗转账后第一步做什么？”、“账户突然不能转账怎么办？”，帮您快速定位处置动作。",
+                "product", 0.88D, true, false, true, true, 43));
+        rag.getExamples().add(example("ex-rag-5", "RAG_QUERY",
+                "家属可以查询客户余额吗？", "家属查询余额",
+                "product", 0.86D, false, false, false, true, 44));
 
         SkillConfig chat = new SkillConfig("GENERAL_CHAT", "通用问答",
                 "兜底对话能力，处理不适合具体工具的自然语言问题。", true, false, false, 10,

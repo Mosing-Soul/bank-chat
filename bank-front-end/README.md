@@ -17,10 +17,10 @@ npm install
 npm run dev
 ```
 
-默认 Vite 代理会把 `/api` 转发到 `http://localhost:8080`。如需改后端地址：
+默认 Vite 代理会把 `/api` 转发到 `http://localhost:9091`。如需改后端地址：
 
 ```bash
-VITE_BACKEND_URL=http://localhost:8080 npm run dev
+VITE_BACKEND_URL=http://localhost:9091 npm run dev
 ```
 
 ## 构建
@@ -36,4 +36,4 @@ docker build -t bank-front-end:1.0 .
 docker run --rm -p 8081:80 bank-front-end:1.0
 ```
 
-生产容器内的 `nginx.conf` 会把 `/api/` 转发到 Docker 网络中的 `java-backend:8080`。
+生产容器内的 `nginx.conf` 会把 `/api/` 转发到 Docker 网络中的 `java-backend:9091`。

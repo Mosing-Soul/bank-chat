@@ -157,7 +157,7 @@ function App() {
   const requestStartedAtRef = useRef(0);
 
   const canSend = useMemo(() => question.trim().length > 0 && !isSending, [isSending, question]);
-  const activeGreeting = greetings[greetingIndex];
+  const activeGreeting = greetings[greetingIndex] ?? greetings[0] ?? defaultGreetings[0];
   const activeSkill = skillConfigs.find((skill) => skill.skillCode === activeSkillCode) ?? skillConfigs[0];
 
   const applySkillConfig = (config: { skills: SkillConfig[]; quickActions: SkillExampleConfig[]; greetings: SkillExampleConfig[] }) => {
@@ -197,10 +197,6 @@ function App() {
     const placeholderTimer = window.setInterval(() => {
       setPlaceholderIndex((current) => (current + 1) % placeholders.length);
     }, 2400);
-    const greetingTimer = window.setInterval(() => {
-      setGreetingIndex((current) => (current + 1) % greetings.length);
-    }, 3600);
-
     const handlePointerDown = (event: MouseEvent) => {
       if (!profileRef.current?.contains(event.target as Node)) {
         setProfileOpen(false);
@@ -214,12 +210,19 @@ function App() {
 
     return () => {
       window.clearInterval(placeholderTimer);
-      window.clearInterval(greetingTimer);
       document.removeEventListener('mousedown', handlePointerDown);
       window.removeEventListener('hashchange', handleHashChange);
       clearAsyncTimers();
     };
   }, []);
+
+  useEffect(() => {
+    setGreetingIndex((current) => current % Math.max(greetings.length, 1));
+    const greetingTimer = window.setInterval(() => {
+      setGreetingIndex((current) => (current + 1) % Math.max(greetings.length, 1));
+    }, 3600);
+    return () => window.clearInterval(greetingTimer);
+  }, [greetings.length]);
 
   useEffect(() => {
     saveMessages(messages);

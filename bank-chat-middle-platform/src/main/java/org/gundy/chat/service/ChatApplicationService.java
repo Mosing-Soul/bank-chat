@@ -53,7 +53,8 @@ public class ChatApplicationService {
 
         // Phase 1: ordinary typed messages always go to the Python LLM router.
         // Legacy operation flows are reachable only through an explicit page action.
-        SkillTransitionResult commandTransition = request.forceSkill()
+        boolean conversationalSkill = isConversationalSkill(request.getRequestedSkill());
+        SkillTransitionResult commandTransition = request.forceSkill() && !conversationalSkill
                 ? dialogueOrchestrationService.tryHandle(
                     traceId, sessionId, userMessage, dialogState, currentHistory,
                     request.getRequestedSkill(), true)
@@ -71,7 +72,7 @@ public class ChatApplicationService {
                 ? route.getRequestedSkill() : null;
         boolean forceSkill = request.forceSkill() && route.isForceSkill();
 
-        SkillTransitionResult transition = forceSkill
+        SkillTransitionResult transition = forceSkill && !conversationalSkill
                 ? dialogStateMachineService.handle(
                     traceId, sessionId, dialogState, userMessage, requestedSkill, true)
                 : SkillTransitionResult.notHandled();
@@ -168,5 +169,13 @@ public class ChatApplicationService {
 
     private boolean hasText(String value) {
         return value != null && value.trim().length() > 0;
+    }
+
+    private boolean isConversationalSkill(String skillCode) {
+        return "RAG_QUERY".equals(skillCode)
+                || "RULE_QUERY".equals(skillCode)
+                || "EXTERNAL_SEARCH".equals(skillCode)
+                || "GOLD_PRICE".equals(skillCode)
+                || "GENERAL_CHAT".equals(skillCode);
     }
 }

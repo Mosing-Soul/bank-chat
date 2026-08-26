@@ -1722,10 +1722,10 @@ button.greeting-line {
 .trace-rail-button-open { opacity: 0; pointer-events: none; }
 
 @media (min-width: 1320px) {
-  .message-list,
-  .quick-actions,
-  .composer { margin-right: 340px; }
-  .tip-banner { margin-left: -155px; }
+  .chat-body { padding-right: 432px; }
+  .composer-panel { padding-right: 432px; }
+  .runtime-sidebar { width: 380px; }
+  .tip-banner { left: calc(50% - 200px); }
 }
 
 @media (max-width: 1319px) {

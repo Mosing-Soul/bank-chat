@@ -6,7 +6,7 @@ from rag_models import QueryRequest, QueryResponse
 
 
 logger = logging.getLogger(__name__)
-NO_STORE_ANSWER = "【行内文档结论】暂无相关文档。\n\n【大模型补充】大模型暂不可用。\n\n【来源】无"
+NO_STORE_ANSWER = "暂未在行内知识库中找到可用于回答该问题的相关资料。"
 
 
 @dataclass
@@ -42,18 +42,18 @@ def build_rag_answer_prompt(question: str, history, relevant_docs, candidate_doc
         history_text = "历史对话：\n" + "\n".join(
             f"{message.role}: {message.content}" for message in history
         ) + "\n\n"
-    if relevant_docs:
-        conclusion_rule = "已命中行内知识库文档，请优先依据命中文档回答并标明来源。"
-    else:
-        conclusion_rule = (
-            "暂未命中高相关行内文档。必须说明‘行内文档暂无相关文档’，"
-            "候选片段只用于辅助判断，不作为行内依据。"
-        )
-    return f"""你是银行客户经理智能助手。请按固定结构回答：
-1. 【行内文档结论】：命中时给出文档结论；未命中时写“暂无相关文档”。
-2. 【大模型补充】：一到三句话，并明确这部分不是行内文档依据。
-3. 【来源】：仅列出实际命中的文档名，没有则写“无”。
-不要编造来源。
+    source_index = "\n".join(
+        f"[{index}] {source}" for index, source in enumerate(unique_sources(relevant_docs), start=1)
+    ) or "无"
+    conclusion_rule = (
+        "已命中行内知识库文档，请依据命中文档自然、连贯地回答。"
+        if relevant_docs else
+        "暂未命中高相关行内文档，请直接说明暂未找到相关资料；候选片段不能作为回答依据。"
+    )
+    return f"""你是银行客户经理智能助手。请直接形成一套完整回答。
+不要使用“行内文档结论”“大模型补充”“来源”等固定分段，不要编造文档外信息。
+引用内部事实时，在对应句末添加 [数字](#internal-citation-数字)，数字必须来自来源编号。
+不要在正文中写文件名或另列来源，页面会统一展示引用来源。
 
 {conclusion_rule}
 
@@ -62,6 +62,9 @@ def build_rag_answer_prompt(question: str, history, relevant_docs, candidate_doc
 
 低相关候选片段（不作为行内依据）：
 {format_docs_for_prompt(candidate_docs)}
+
+来源编号：
+{source_index}
 
 用户问题：{question}
 
@@ -97,10 +100,7 @@ class RagService:
         sources = unique_sources(relevant_docs)
         fallback = NO_STORE_ANSWER
         if relevant_docs:
-            fallback = (
-                "【行内文档结论】已找到相关片段，但大模型整理暂时不可用。"
-                "\n\n【大模型补充】暂无。\n\n【来源】" + "、".join(sources)
-            )
+            fallback = "已找到相关行内资料，但回答生成服务暂时不可用，请稍后重试。"
         answer = self._invoke_or_fallback(
             build_rag_answer_prompt(question, history, relevant_docs, candidate_docs),
             fallback,

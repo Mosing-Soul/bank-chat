@@ -109,6 +109,27 @@ class ConversationPipelineTest(unittest.TestCase):
         self.assertEqual([], rag.queries)
         self.assertEqual([], search.queries)
         self.assertEqual("统一生成的答案", response.answer)
+        self.assertIn("华辰银行客户经理智能助手", llm.prompts[0])
+        self.assertIn("解释、写作、问候和其他正常的通用对话", llm.prompts[0])
+
+    def test_answer_model_receives_original_and_rewritten_questions(self):
+        service = StaticIntentService(IntentResult(
+            intent=IntentType.EXTERNAL_API_QUERY,
+            selectedIntents=[IntentType.EXTERNAL_API_QUERY],
+            rewrittenQuery="成都今天的天气情况如何？",
+            confidence=0.9,
+        ))
+        payload = AiChatRequest(
+            traceId="t-weather", sessionId="s-weather", message="成都今天适合穿什么衣服？",
+        )
+        llm = FakeLlm()
+
+        AiChatOrchestrator(
+            service, FakeRag(), FakeSearch(), llm, now_provider=self.fixed_now
+        ).invoke(payload)
+
+        self.assertIn("用户原始问题：成都今天适合穿什么衣服？", llm.prompts[0])
+        self.assertIn("结合对话改写后的问题：成都今天的天气情况如何？", llm.prompts[0])
 
     def test_external_sources_are_kept_as_web_citations_for_inline_links(self):
         service = StaticIntentService(IntentResult(

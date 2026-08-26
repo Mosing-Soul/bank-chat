@@ -426,11 +426,11 @@ public class SkillConfigService {
                 "product", 0.88D, true, true, false, true, 45));
         rag.getExamples().add(example("ex-greet-1", "RAG_QUERY",
                 "夫妻资产能合并计算客户等级吗？",
-                "欢迎回来！您可以咨询客户分层与权益，例如“夫妻资产能合并计算客户等级吗？”，我会基于行内知识库给出口径。",
+                "客户分层与权益：试试“夫妻资产能合并计算客户等级吗？”",
                 "bank", 0.85D, false, false, true, true, 51));
         rag.getExamples().add(example("ex-greet-2", "RAG_QUERY",
                 "审批通过后为什么还没放款？",
-                "遇到贷款业务疑问时，可以问我“审批通过后为什么还没放款？”，办理流程和补件要求都能快速查到。",
+                "贷款业务：试试“审批通过后为什么还没放款？”",
                 "product", 0.85D, false, false, true, true, 52));
         rag.getExamples().add(example("ex-greet-3", "RAG_QUERY",
                 "账户突然不能转账怎么办？",

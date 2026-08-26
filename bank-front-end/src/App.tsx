@@ -121,13 +121,13 @@ const placeholders = [
 
 const defaultGreetings: GreetingConfig[] = [
   {
-    text: '欢迎回来！您可以咨询客户分层与权益，例如“夫妻资产能合并计算客户等级吗？”，我会基于行内知识库给出口径。',
+    text: '客户分层与权益：试试“夫妻资产能合并计算客户等级吗？”',
     prompt: '夫妻资产能合并计算客户等级吗？',
     skill: '客户分层问答',
     requestedSkill: 'RAG_QUERY',
   },
   {
-    text: '遇到贷款业务疑问时，可以问我“审批通过后为什么还没放款？”，办理流程和补件要求都能快速查到。',
+    text: '贷款业务：试试“审批通过后为什么还没放款？”',
     prompt: '审批通过后为什么还没放款？',
     skill: '贷款业务问答',
     requestedSkill: 'RAG_QUERY',
@@ -190,6 +190,7 @@ function App() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [runtimeTrace, setRuntimeTrace] = useState<RuntimeTraceState>({ status: 'IDLE', progress: [] });
   const [tracePanelOpen, setTracePanelOpen] = useState(() => window.innerWidth >= 1320);
+  const [tipVisible, setTipVisible] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
   const messageScrollRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -724,6 +725,7 @@ function App() {
                 <span>岗位</span>
                 <strong>客户经理</strong>
               </div>
+              <p className="profile-demo-note">演示账号：未接入用户与权限体系</p>
               <button className="logout-button" type="button" role="menuitem" onClick={handleLogout}>
                 <LogoutOutlined />
                 退出登录
@@ -734,7 +736,12 @@ function App() {
       </header>
 
       <section className="chat-body" aria-label="聊天消息">
-        <div className="tip-banner">💡 小提示：您可以直接说“查询...”或“发送...”</div>
+        {tipVisible && (
+          <div className="tip-banner">
+            <span>💡 演示项目，文档均为基于公开信息生成的模拟材料，不涉及真实业务数据；实时联网查询可能较慢，感谢等待。</span>
+            <button type="button" onClick={() => setTipVisible(false)} aria-label="关闭提示"><CloseOutlined /></button>
+          </div>
+        )}
 
         <div className="message-scroll" ref={messageScrollRef}>
           {messages.length === 0 ? (
@@ -867,6 +874,8 @@ function RuntimeTraceSidebar({
           </div>
           <button type="button" onClick={onToggle} aria-label="收起运行追踪"><CloseOutlined /></button>
         </div>
+
+        <p className="trace-demo-note">演示展示：此处为后端真实的执行路径与检索过程，生产系统不提供此面板。</p>
 
         <div className={`trace-status trace-status-${state.status.toLowerCase()}`}>
           <span className="trace-status-dot" />

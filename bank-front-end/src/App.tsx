@@ -27,6 +27,7 @@ import {
 import { App as AntApp, Button, Input, Slider, Switch, Tooltip } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import logoUrl from '../asset/logo.jfif';
 import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
 import type { ChatMessage, ChatProgressEvent, ChatResponse, Citation, ExecutionTrace, SkillConfig, SkillExampleConfig } from './types/chat';
 import {
@@ -611,7 +612,7 @@ function App() {
       <header className="chat-header">
         <div className="header-brand">
           <div className="brand-logo" aria-hidden="true">
-            <BankOutlined />
+            <img src={logoUrl} alt="" />
           </div>
           <div className="header-copy">
             <h1>今日会话</h1>
@@ -862,11 +863,16 @@ function RuntimeTraceSidebar({
           <section className="trace-section">
             <div className="trace-section-title"><AppstoreOutlined /><span>检索指标</span></div>
             <div className="trace-metric-grid">
-              <div><strong>{metrics.retrievedCount ?? 0}</strong><span>召回片段</span></div>
-              <div><strong>{metrics.acceptedCount ?? 0}</strong><span>阈值命中</span></div>
-              <div><strong>{metrics.internalSourceCount ?? 0}</strong><span>行内文件</span></div>
+              <div><strong>{metrics.retrievedCount ?? 0}</strong><span>Top-K 召回</span></div>
+              <div><strong>{metrics.acceptedCount ?? 0}</strong><span>采用片段</span></div>
+              <div><strong>{metrics.internalSourceCount ?? 0}</strong><span>去重文件</span></div>
               <div><strong>{metrics.webResultCount ?? 0}</strong><span>网页结果</span></div>
             </div>
+            {(metrics.acceptedCount ?? 0) > 0 ? (
+              <p className="trace-metric-note">
+                已将全部 {metrics.acceptedCount} 个阈值内片段提供给回答模型；来源区按文件去重为 {metrics.internalSourceCount ?? 0} 个。
+              </p>
+            ) : null}
             {(metrics.bestSimilarity != null || metrics.averageSimilarity != null) ? (
               <div className="trace-score-summary">
                 <span>最高相似度 <strong>{metrics.bestSimilarity != null ? `${(metrics.bestSimilarity * 100).toFixed(1)}%` : '--'}</strong></span>
@@ -1176,6 +1182,14 @@ function MessageBubble({
     ? message.citations
     : (message.sources ?? []).map((source) => ({ source, title: source, type: 'INTERNAL' }));
   const internalCitations = messageCitations.filter((citation) => citation.type !== 'WEB' && !citation.url);
+  const renderedContent = internalCitations.length > 0
+    ? message.content.replace(/\[(\d+)\](?!\s*\()/g, (marker, rawIndex: string) => {
+      const index = Number(rawIndex);
+      return index >= 1 && index <= internalCitations.length
+        ? `[${rawIndex}](#internal-citation-${rawIndex})`
+        : marker;
+    })
+    : message.content;
 
   return (
     <article className={`message-row ${isUser ? 'message-row-user' : 'message-row-assistant'}`}>
@@ -1197,7 +1211,7 @@ function MessageBubble({
                   : <a {...props} href={href} target="_blank" rel="noreferrer noopener" />,
               }}
             >
-              {message.content}
+              {renderedContent}
             </ReactMarkdown>
             {internalCitations.length > 0 ? (
               <footer className="message-internal-sources" aria-label="行内引用来源">

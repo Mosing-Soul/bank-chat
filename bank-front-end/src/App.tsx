@@ -675,7 +675,7 @@ function App() {
           </Tooltip>
 
           <button
-            className="config-shortcut-button"
+            className="config-shortcut-button config-shortcut-button-hidden"
             type="button"
             onClick={openConfigWorkspace}
             aria-label="进入技能运营配置"
@@ -744,7 +744,7 @@ function App() {
                   <span className="art-emoji">👋💬</span>
                 </div>
                 <p className="empty-title">欢迎回来！试试下方快捷问题或直接输入。</p>
-                <p className="empty-copy">我可以帮您快速查询客户资产、市场价格、产品到期和业务规则。</p>
+                <p className="empty-copy">我可以帮您查询行内业务知识、办理流程和材料要求，也可以联网检索最新公开信息。</p>
               </div>
             </div>
           ) : (

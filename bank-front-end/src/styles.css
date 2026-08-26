@@ -234,6 +234,10 @@ button.greeting-line {
     background 0.18s ease;
 }
 
+.config-shortcut-button-hidden {
+  display: none;
+}
+
 .config-shortcut-button:hover {
   width: 136px;
   border-color: rgba(37, 99, 235, 0.3);

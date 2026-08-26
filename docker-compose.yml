@@ -8,7 +8,6 @@ volumes:
   redis-data:
   rag-vector-data:
   huggingface-cache:
-  java-data:
 
 x-python-environment: &python-environment
   PYTHON_SERVICE_HOST: 0.0.0.0
@@ -91,9 +90,6 @@ services:
       AI_DIALOGUE_COMMAND_ENABLED: "true"
       AI_DIALOGUE_AUTO_RESUME_READ_ONLY: "true"
       INTERNAL_SKILL_API_KEY: ${INTERNAL_SKILL_API_KEY}
-      SKILL_CONFIG_SQLITE_PATH: /app/data/bank-chat-skill-config.db
-    volumes:
-      - java-data:/app/data
     ports:
       - "${JAVA_BACKEND_PORT:-9091}:9091"
     depends_on:

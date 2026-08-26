@@ -43,12 +43,17 @@ public class SkillConfigService {
     }
 
     public SkillConfigService(ObjectMapper objectMapper,
+                              @Value("${bank.skills.config.persistence-enabled:false}") boolean persistenceEnabled,
                               @Value("${bank.skills.config.sqlite-path:data/bank-chat-skill-config.db}") String sqlitePath) {
         this.objectMapper = objectMapper;
-        this.sqlitePath = sqlitePath;
-        this.persistenceEnabled = true;
-        initializeStore();
-        this.skills = loadPersistedOrDefault();
+        this.persistenceEnabled = persistenceEnabled;
+        this.sqlitePath = persistenceEnabled ? sqlitePath : null;
+        if (persistenceEnabled) {
+            initializeStore();
+            this.skills = loadPersistedOrDefault();
+        } else {
+            this.skills = buildDefaultSkills();
+        }
     }
 
     public synchronized SkillConfigResponse getConfig() {
@@ -203,6 +208,12 @@ public class SkillConfigService {
                 result.add(example);
             }
         }
+        Collections.sort(result, new Comparator<SkillExampleConfig>() {
+            @Override
+            public int compare(SkillExampleConfig left, SkillExampleConfig right) {
+                return Integer.compare(left.getSortOrder(), right.getSortOrder());
+            }
+        });
         return result;
     }
 
@@ -391,30 +402,44 @@ public class SkillConfigService {
         SkillConfig gold = new SkillConfig("GOLD_PRICE", "市场价格查询",
                 "查询黄金、金价、Au9999等外部实时行情。", true, true, true, 70,
                 "查询黄金或贵金属实时行情价格。");
-        gold.getExamples().add(example("ex-gold-1", "GOLD_PRICE", "黄金价格是多少", "黄金价格", "gold", 0.92D, true, false, false, true, 20));
-        gold.getExamples().add(example("ex-gold-2", "GOLD_PRICE", "现在金价多少", "查询当前金价", "gold", 0.9D, true, false, false, true, 21));
+        gold.getExamples().add(example("ex-gold-1", "GOLD_PRICE", "今天黄金价格是多少？", "实时金价", "gold", 0.92D, true, true, false, true, 44));
+        gold.getExamples().add(example("ex-gold-2", "GOLD_PRICE", "现在金价多少", "查询当前金价", "gold", 0.9D, false, false, false, true, 21));
         gold.getExamples().add(example("ex-gold-3", "GOLD_PRICE", "Au9999现在多少钱", "查询Au9999行情", "gold", 0.88D, false, false, false, true, 22));
+        gold.getExamples().add(example("ex-gold-4", "GOLD_PRICE", "今天美元兑人民币汇率是多少？",
+                "需要实时公开信息时，可以问我“今天美元兑人民币汇率是多少？”，我会联网查询最新信息。",
+                "gold", 0.86D, false, false, true, true, 54));
 
         SkillConfig rag = new SkillConfig("RAG_QUERY", "行内知识问答",
                 "查询行内客户分层、贷款办理、理财适当性、反欺诈与信息保护等知识。", true, true, true, 75,
                 "查询行内规则、制度、产品说明或文档内容。");
         rag.getExamples().add(example("ex-rag-1", "RAG_QUERY",
                 "白金级客户的资产门槛是多少？", "白金资产门槛",
-                "bank", 0.92D, true, true, false, true, 40));
+                "bank", 0.92D, true, true, false, true, 41));
         rag.getExamples().add(example("ex-rag-2", "RAG_QUERY",
-                "消费贷款需要什么用途材料？",
-                "遇到贷款业务疑问时，可以问我“消费贷款需要什么用途材料？”、“审批通过后为什么还没放款？”，办理流程和补件要求都能快速查到。",
-                "product", 0.91D, true, false, true, true, 41));
-        rag.getExamples().add(example("ex-rag-3", "RAG_QUERY",
                 "客户被骗转账后第一步做什么？", "被骗转账处置",
                 "product", 0.9D, true, true, false, true, 42));
-        rag.getExamples().add(example("ex-rag-4", "RAG_QUERY",
-                "客户被骗转账后第一步做什么？",
-                "涉及反欺诈与应急处置时，试试“客户被骗转账后第一步做什么？”、“账户突然不能转账怎么办？”，帮您快速定位处置动作。",
-                "product", 0.88D, true, false, true, true, 43));
-        rag.getExamples().add(example("ex-rag-5", "RAG_QUERY",
+        rag.getExamples().add(example("ex-rag-3", "RAG_QUERY",
                 "家属可以查询客户余额吗？", "家属查询余额",
-                "product", 0.86D, false, false, false, true, 44));
+                "product", 0.86D, true, true, false, true, 43));
+        rag.getExamples().add(example("ex-rag-4", "RAG_QUERY",
+                "消费贷款需要什么用途材料？", "贷款用途材料",
+                "product", 0.88D, true, true, false, true, 45));
+        rag.getExamples().add(example("ex-greet-1", "RAG_QUERY",
+                "夫妻资产能合并计算客户等级吗？",
+                "欢迎回来！您可以咨询客户分层与权益，例如“夫妻资产能合并计算客户等级吗？”，我会基于行内知识库给出口径。",
+                "bank", 0.85D, false, false, true, true, 51));
+        rag.getExamples().add(example("ex-greet-2", "RAG_QUERY",
+                "审批通过后为什么还没放款？",
+                "遇到贷款业务疑问时，可以问我“审批通过后为什么还没放款？”，办理流程和补件要求都能快速查到。",
+                "product", 0.85D, false, false, true, true, 52));
+        rag.getExamples().add(example("ex-greet-3", "RAG_QUERY",
+                "账户突然不能转账怎么办？",
+                "涉及账户异常与应急处置时，试试“账户突然不能转账怎么办？”，帮您快速定位处置动作。",
+                "product", 0.85D, false, false, true, true, 53));
+        rag.getExamples().add(example("ex-greet-5", "RAG_QUERY",
+                "客户贷款用途材料疑似伪造怎么办？",
+                "合规与信息保护问题也可以直接问，例如“客户贷款用途材料疑似伪造怎么办？”。",
+                "product", 0.84D, false, false, true, true, 55));
 
         SkillConfig chat = new SkillConfig("GENERAL_CHAT", "通用问答",
                 "兜底对话能力，处理不适合具体工具的自然语言问题。", true, false, false, 10,

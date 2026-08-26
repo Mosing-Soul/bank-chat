@@ -88,6 +88,27 @@ const defaultQuickQuestions: QuickQuestion[] = [
     requestedSkill: 'RAG_QUERY',
     forceWhenClicked: true,
   },
+  {
+    icon: <BankOutlined />,
+    label: '家属查询余额',
+    value: '家属可以查询客户余额吗？',
+    requestedSkill: 'RAG_QUERY',
+    forceWhenClicked: true,
+  },
+  {
+    icon: <GoldOutlined />,
+    label: '实时金价',
+    value: '今天黄金价格是多少？',
+    requestedSkill: 'GOLD_PRICE',
+    forceWhenClicked: true,
+  },
+  {
+    icon: <ProductOutlined />,
+    label: '贷款用途材料',
+    value: '消费贷款需要什么用途材料？',
+    requestedSkill: 'RAG_QUERY',
+    forceWhenClicked: true,
+  },
 ];
 
 const placeholders = [
@@ -98,26 +119,32 @@ const placeholders = [
 
 const defaultGreetings: GreetingConfig[] = [
   {
-    text: '欢迎回来！您可以咨询客户分层与权益，例如“白金级客户的资产门槛是多少？”、“夫妻资产能合并计算等级吗？”，我会基于行内知识库给出口径。',
-    prompt: '白金级客户的资产门槛是多少？',
+    text: '欢迎回来！您可以咨询客户分层与权益，例如“夫妻资产能合并计算客户等级吗？”，我会基于行内知识库给出口径。',
+    prompt: '夫妻资产能合并计算客户等级吗？',
     skill: '客户分层问答',
     requestedSkill: 'RAG_QUERY',
   },
   {
-    text: '遇到贷款业务疑问时，可以问我“消费贷款需要什么用途材料？”、“审批通过后为什么还没放款？”，办理流程和补件要求都能快速查到。',
-    prompt: '消费贷款需要什么用途材料？',
+    text: '遇到贷款业务疑问时，可以问我“审批通过后为什么还没放款？”，办理流程和补件要求都能快速查到。',
+    prompt: '审批通过后为什么还没放款？',
     skill: '贷款业务问答',
     requestedSkill: 'RAG_QUERY',
   },
   {
-    text: '涉及反欺诈与应急处置时，试试“客户被骗转账后第一步做什么？”、“账户突然不能转账怎么办？”，帮您快速定位处置动作。',
-    prompt: '客户被骗转账后第一步做什么？',
-    skill: '反欺诈问答',
+    text: '涉及账户异常与应急处置时，试试“账户突然不能转账怎么办？”，帮您快速定位处置动作。',
+    prompt: '账户突然不能转账怎么办？',
+    skill: '账户异常问答',
     requestedSkill: 'RAG_QUERY',
   },
   {
-    text: '合规与信息保护问题也可以直接问，例如“家属可以查询客户余额吗？”、“客户贷款用途材料疑似伪造怎么办？”。',
-    prompt: '家属可以查询客户余额吗？',
+    text: '需要实时公开信息时，可以问我“今天美元兑人民币汇率是多少？”，我会联网查询最新信息。',
+    prompt: '今天美元兑人民币汇率是多少？',
+    skill: '联网信息查询',
+    requestedSkill: 'GOLD_PRICE',
+  },
+  {
+    text: '合规与信息保护问题也可以直接问，例如“客户贷款用途材料疑似伪造怎么办？”。',
+    prompt: '客户贷款用途材料疑似伪造怎么办？',
     skill: '合规问答',
     requestedSkill: 'RAG_QUERY',
   },
@@ -188,7 +215,7 @@ function App() {
       setQuickQuestions(nextQuickQuestions);
     }
     if (nextGreetings.length > 0) {
-      setGreetings([...nextGreetings, { text: '欢迎回来，您可以直接输入客户、产品或业务问题。' }]);
+      setGreetings(nextGreetings);
     }
   };
 

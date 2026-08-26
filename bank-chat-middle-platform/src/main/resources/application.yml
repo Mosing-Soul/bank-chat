@@ -30,6 +30,7 @@ server:
 bank:
   skills:
     config:
+      persistence-enabled: ${SKILL_CONFIG_PERSISTENCE_ENABLED:false}
       sqlite-path: ${SKILL_CONFIG_SQLITE_PATH:data/bank-chat-skill-config.db}
     customer:
       core-simulator:

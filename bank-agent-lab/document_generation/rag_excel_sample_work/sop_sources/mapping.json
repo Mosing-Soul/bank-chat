@@ -1,10 +1,10 @@
-﻿[
+[
   {
     "source": "D:\\JetBrains\\project\\bank-chat\\outputs\\rag_excel_sample_work\\sop_sources\\sop_1.xlsx",
-    "pdf": "华辰银行个人消费贷款客户经理办理SOP_Mock_V1.0.pdf"
+    "pdf": "华辰银行个人消费贷款客户经理标准作业指引_V1.0.pdf"
   },
   {
     "source": "D:\\JetBrains\\project\\bank-chat\\outputs\\rag_excel_sample_work\\sop_sources\\sop_2.xlsx",
-    "pdf": "华辰银行客户身份识别与异常交易核查SOP_Mock_V1.0.pdf"
+    "pdf": "华辰银行客户身份识别与异常交易核查操作规程_V1.0.pdf"
   }
 ]

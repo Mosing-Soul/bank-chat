@@ -4,7 +4,7 @@ from collections import Counter
 sys.path.insert(0, r"D:\JetBrains\project\bank-chat\bank-agent-demo\python")
 from build_vector_store import parse_general_excel
 
-path = r"D:\JetBrains\project\bank-chat\bank-agent-demo\assets\华辰银行零售客户经理QA知识库_Mock_V1.0.xlsx"
+path = r"D:\JetBrains\project\bank-chat\bank-agent-demo\assets\华辰银行零售客户经理业务知识问答手册_V1.0.xlsx"
 chunks = parse_general_excel(path)
 counts = Counter(c.metadata.get("sheet") for c in chunks)
 assert len(chunks) == 61, len(chunks)

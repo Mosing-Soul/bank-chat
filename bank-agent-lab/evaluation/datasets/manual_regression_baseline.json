@@ -26,7 +26,7 @@
     },
     {
       "id": "MAN-RAG-001", "category": "RAG知识问答", "title": "客户等级门槛",
-      "turns": [{"message": "白金级客户的资产门槛是多少？", "expectedRoute": "RAG", "requiredCitationTypes": ["INTERNAL"], "criteria": "回答Mock门槛及连续达标口径，并带内部来源。"}]
+      "turns": [{"message": "白金级客户的资产门槛是多少？", "expectedRoute": "RAG", "requiredCitationTypes": ["INTERNAL"], "criteria": "回答内部参考门槛及连续达标口径，并带内部来源。"}]
     },
     {
       "id": "MAN-RAG-002", "category": "RAG知识问答", "title": "异常转账核查",
@@ -78,7 +78,7 @@
     },
     {
       "id": "MAN-GEN-001", "category": "随口问题", "title": "助手身份",
-      "turns": [{"message": "你是谁，你是什么银行的？", "expectedRoute": "LLM DIRECT", "requiredCitationTypes": [], "criteria": "说明是华辰银行客户经理智能助手及Mock演示背景，不冒充真实银行。"}]
+      "turns": [{"message": "你是谁，你是什么银行的？", "expectedRoute": "LLM DIRECT", "requiredCitationTypes": [], "criteria": "说明是华辰银行客户经理智能助手及项目演示背景，不冒充真实银行。"}]
     },
     {
       "id": "MAN-GEN-002", "category": "随口问题", "title": "系统工作方式",

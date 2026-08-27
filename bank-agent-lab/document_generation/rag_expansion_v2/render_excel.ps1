@@ -1,5 +1,5 @@
-$ErrorActionPreference = 'Stop'
-$xlsx = (Get-ChildItem -LiteralPath 'D:\JetBrains\project\bank-chat\bank-agent-demo\assets' -Filter '*_Mock_V2.0.xlsx' | Select-Object -First 1).FullName
+﻿$ErrorActionPreference = 'Stop'
+$xlsx = (Get-ChildItem -LiteralPath 'D:\JetBrains\project\bank-chat\bank-agent-demo\assets' -Filter '*业务知识问答手册_V2.0.xlsx' | Select-Object -First 1).FullName
 $outDir = 'D:\JetBrains\project\bank-chat\outputs\rag_expansion_v2\excel_previews'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $excel = New-Object -ComObject Excel.Application
@@ -23,3 +23,4 @@ try {
   $book.Close($false)
 } finally { $excel.Quit(); [Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null }
 Get-ChildItem $outDir -Filter '*.png' | Select-Object Name,Length
+

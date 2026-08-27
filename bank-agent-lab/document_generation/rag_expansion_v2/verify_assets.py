@@ -8,7 +8,7 @@ ASSETS=ROOT/"bank-agent-demo"/"assets"
 PRE=ROOT/"outputs"/"rag_expansion_v2"/"pdf_previews"
 PRE.mkdir(parents=True,exist_ok=True)
 
-xlsx=ASSETS/"华辰银行零售客户经理QA知识库_Mock_V2.0.xlsx"
+xlsx=ASSETS/"华辰银行零售客户经理业务知识问答手册_V2.0.xlsx"
 wb=load_workbook(xlsx,data_only=False)
 ws=wb["客户经理QA"]
 qa_count=ws.max_row-4
@@ -17,7 +17,7 @@ assert qa_count==150 and len(set(questions))==150
 assert len(ws.merged_cells.ranges)>=10
 
 results=[]
-for pdf in sorted(ASSETS.glob("*SOP_Mock_V1.0.pdf")):
+for pdf in sorted(ASSETS.glob("华辰银行*.pdf")):
     doc=fitz.open(pdf)
     chars=sum(len(p.get_text()) for p in doc)
     assert len(doc)>=4 and chars>1000

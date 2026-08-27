@@ -12,8 +12,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 
 ROOT = Path(r"D:\JetBrains\project\bank-chat")
 ASSETS = ROOT / "bank-agent-demo" / "assets"
-OLD_XLSX = ASSETS / "华辰银行零售客户经理QA知识库_Mock_V1.0.xlsx"
-NEW_XLSX = ASSETS / "华辰银行零售客户经理QA知识库_Mock_V2.0.xlsx"
+OLD_XLSX = ASSETS / "华辰银行零售客户经理业务知识问答手册_V2.0.xlsx"
+NEW_XLSX = ASSETS / "华辰银行零售客户经理业务知识问答手册_V2.0.xlsx"
 
 domains = {
 "客户分层与权益": [
@@ -45,7 +45,7 @@ def make_rows():
         for i,(topic,q,a) in enumerate(items,1):
             rows.append([f"QA-{prefix}-V2-{i:03d}",domain,topic,q,f"{topic}怎么办；{q.rstrip('？')}吗", "个人客户", a,
                 "完成客户身份核验并查询当前系统规则","按具体业务补充，遵循最小必要原则","官方线上渠道或营业网点；以系统时效为准",
-                "不得承诺审批、收益、解除管控或处理结果","身份、意愿、材料或风险状态存疑时转主管/专岗",f"SOP-{prefix}-001","华辰银行Mock内部口径","V2.0"])
+                "不得承诺审批、收益、解除管控或处理结果","身份、意愿、材料或风险状态存疑时转主管/专岗",f"SOP-{prefix}-001","华辰银行内部业务口径","V2.0"])
     return rows
 
 def expand_excel():
@@ -60,12 +60,12 @@ def expand_excel():
             src=ws.cell(start-1,cidx)
             cell._style=copy(src._style); cell.alignment=copy(src.alignment); cell.number_format=src.number_format
         ws.row_dimensions[ridx].height=78
-    ws["A1"]="华辰银行零售客户经理 QA 知识库（Mock V2.0 · 150条）"
-    wb["使用说明"]["A1"]="华辰银行零售客户经理 RAG 知识库说明（Mock V2.0）"
+    ws["A1"]="华辰银行零售客户经理业务知识问答手册（V2.0 · 150条）"
+    wb["使用说明"]["A1"]="华辰银行零售客户经理业务知识问答手册使用说明（V2.0）"
     for row in wb["使用说明"].iter_rows():
         for cell in row:
             if isinstance(cell.value,str): cell.value=cell.value.replace("31条","150条").replace("V1.0","V2.0")
-    wb.properties.title="华辰银行零售客户经理QA知识库 Mock V2.0"
+    wb.properties.title="华辰银行零售客户经理业务知识问答手册 V2.0"
     wb.save(NEW_XLSX)
     check=load_workbook(NEW_XLSX,read_only=False)
     assert check["客户经理QA"].max_row-4==150
@@ -73,14 +73,14 @@ def expand_excel():
     return NEW_XLSX
 
 pdf_docs=[
-("华辰银行个人账户开户与账户分类管理SOP_Mock_V1.0.pdf","个人账户开户与账户分类管理","SOP-AC-001",["需求询问与账户类别匹配","客户本人身份及证件核验","开户用途、职业和常住信息尽调","账户数量及风险状态查询","客户本人确认并设置认证工具","交付安全提示与回访留痕"]),
-("华辰银行零售客户分层与权益服务SOP_Mock_V1.0.pdf","零售客户分层与权益服务","SOP-CS-001",["查询月日均综合金融资产","核对客户资料与风险状态","系统生成候选等级","复核异常资产与关联关系","通知等级及权益规则","受理权益缺失和降级异议"]),
-("华辰银行理财产品销售适当性管理SOP_Mock_V1.0.pdf","理财产品销售适当性管理","SOP-WM-001",["了解期限、流动性与投资目标","客户本人完成风险测评","产品风险等级匹配","完整披露风险、费用和期限","按要求完成双录与客户确认","交易后提供净值和赎回服务"]),
-("华辰银行基金与保险代销客户经理SOP_Mock_V1.0.pdf","基金与保险代销客户经理服务","SOP-FI-001",["确认银行代销角色","完成客户需求与风险评估","使用审批版材料介绍产品","基金净值或保险利益分层披露","完成双录、签署及交易确认","受理赎回、退保和售后变更"]),
-("华辰银行个人贵金属产品销售与风险揭示SOP_Mock_V1.0.pdf","个人贵金属产品销售与风险揭示","SOP-PM-001",["区分实时价格和不同产品报价","确认客户风险承受与资金用途","说明价格、汇率、价差和流动性风险","介绍实物验收、保管与回购条件","客户本人下单并确认费用","留存风险揭示和成交凭证"]),
-("华辰银行消费者投诉处理与消保升级SOP_Mock_V1.0.pdf","消费者投诉处理与消保升级","SOP-CP-001",["首问受理并生成投诉编号","复述确认事实和客户诉求","调取合同、录音和交易记录","简单事项3个工作日内反馈","复杂事项15日内反馈进展","办结回访并归档整改措施"]),
-("华辰银行特殊客户与高风险客户服务SOP_Mock_V1.0.pdf","特殊客户与高风险客户服务","SOP-SP-001",["识别高龄、残障、代理或高风险情形","提供无障碍或上门评估","单独核实本人真实意愿","加强身份、授权和交易背景核验","疑似胁迫诈骗时暂停并升级","双人见证及全过程留痕"]),
-("华辰银行客户信息保护与资料留痕SOP_Mock_V1.0.pdf","客户信息保护与资料留痕","SOP-PR-001",["明确业务目的和合法依据","仅收集最小必要客户信息","使用官方渠道传输与存储","按权限查询并记录操作日志","误发或泄露立即报告补救","到期归档或按制度安全销毁"])]
+("华辰银行个人账户开户与分类管理操作规程_V1.0.pdf","个人账户开户与账户分类管理","SOP-AC-001",["需求询问与账户类别匹配","客户本人身份及证件核验","开户用途、职业和常住信息尽调","账户数量及风险状态查询","客户本人确认并设置认证工具","交付安全提示与回访留痕"]),
+("华辰银行零售客户分层与权益服务管理指引_V1.0.pdf","零售客户分层与权益服务","SOP-CS-001",["查询月日均综合金融资产","核对客户资料与风险状态","系统生成候选等级","复核异常资产与关联关系","通知等级及权益规则","受理权益缺失和降级异议"]),
+("华辰银行理财产品销售适当性管理操作规程_V1.0.pdf","理财产品销售适当性管理","SOP-WM-001",["了解期限、流动性与投资目标","客户本人完成风险测评","产品风险等级匹配","完整披露风险、费用和期限","按要求完成双录与客户确认","交易后提供净值和赎回服务"]),
+("华辰银行基金与保险代销业务操作规程_V1.0.pdf","基金与保险代销客户经理服务","SOP-FI-001",["确认银行代销角色","完成客户需求与风险评估","使用审批版材料介绍产品","基金净值或保险利益分层披露","完成双录、签署及交易确认","受理赎回、退保和售后变更"]),
+("华辰银行个人贵金属产品销售与风险揭示操作规程_V1.0.pdf","个人贵金属产品销售与风险揭示","SOP-PM-001",["区分实时价格和不同产品报价","确认客户风险承受与资金用途","说明价格、汇率、价差和流动性风险","介绍实物验收、保管与回购条件","客户本人下单并确认费用","留存风险揭示和成交凭证"]),
+("华辰银行消费者投诉处理与消保升级操作规程_V1.0.pdf","消费者投诉处理与消保升级","SOP-CP-001",["首问受理并生成投诉编号","复述确认事实和客户诉求","调取合同、录音和交易记录","简单事项3个工作日内反馈","复杂事项15日内反馈进展","办结回访并归档整改措施"]),
+("华辰银行特殊客户与高风险客户服务管理指引_V1.0.pdf","特殊客户与高风险客户服务","SOP-SP-001",["识别高龄、残障、代理或高风险情形","提供无障碍或上门评估","单独核实本人真实意愿","加强身份、授权和交易背景核验","疑似胁迫诈骗时暂停并升级","双人见证及全过程留痕"]),
+("华辰银行客户信息保护与资料留痕管理规范_V1.0.pdf","客户信息保护与资料留痕","SOP-PR-001",["明确业务目的和合法依据","仅收集最小必要客户信息","使用官方渠道传输与存储","按权限查询并记录操作日志","误发或泄露立即报告补救","到期归档或按制度安全销毁"])]
 
 def pdf_styles():
     font=r"C:\Windows\Fonts\msyh.ttc"
@@ -95,7 +95,7 @@ def pdf_styles():
 
 def build_pdf(path,title,code,steps):
     st=pdf_styles(); doc=SimpleDocTemplate(str(path),pagesize=A4,rightMargin=18*mm,leftMargin=18*mm,topMargin=17*mm,bottomMargin=17*mm,title=title,author="OpenAI Codex")
-    story=[Paragraph("华辰银行",st["title"]),Paragraph(title+"（Mock V1.0）",st["title"]),Paragraph(f"文件编号：{code}　生效日期：2026-08-25　适用范围：零售客户经理及协同岗位",st["body"]),Spacer(1,8),Paragraph("重要声明",st["h1"]),Paragraph("本文件为面试演示与RAG测试使用的虚构制度，不代表任何真实银行、监管机构或产品承诺。真实办理应以届时法律法规、产品文件和银行正式制度为准。",st["body"]),PageBreak()]
+    story=[Paragraph("华辰银行",st["title"]),Paragraph(title+"（V1.0）",st["title"]),Paragraph(f"文件编号：{code}　生效日期：2026-08-25　适用范围：零售客户经理及协同岗位",st["body"]),Spacer(1,8),Paragraph("适用说明",st["h1"]),Paragraph("本材料用于内部培训、业务演练与知识检索验证，具体业务办理以本行现行制度、产品文件及系统结果为准。",st["body"]),PageBreak()]
     story += [Paragraph("一、目的与原则",st["h1"]),Paragraph("统一客户经理受理、核验、风险提示、升级和留痕动作，确保客户获得清晰、一致、可追溯的服务。执行中坚持客户本人真实意愿、适当性、最小必要、审慎合规和信息保护原则。",st["body"]),Paragraph("二、职责分工",st["h1"])]
     role_data=[[Paragraph("角色",st["small"]),Paragraph("主要职责",st["small"])],[Paragraph("客户经理",st["small"]),Paragraph("需求识别、材料受理、风险提示、系统录入和客户沟通。",st["small"])],[Paragraph("网点主管",st["small"]),Paragraph("异常复核、授权审批、投诉和高风险事件协调。",st["small"])],[Paragraph("专业/合规岗位",st["small"]),Paragraph("专业审查、风险判断、制度解释和升级处置。",st["small"])]]
     t=Table(role_data,colWidths=[36*mm,130*mm]); t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17365D")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,-1),"CN"),("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#B8C4CE")),("VALIGN",(0,0),(-1,-1),"TOP"),("PADDING",(0,0),(-1,-1),6)])); story += [t,PageBreak(),Paragraph("三、标准流程",st["h1"])]
@@ -109,7 +109,7 @@ def build_pdf(path,title,code,steps):
     for x in ["我先核实您的实际需求和账户状态，再给您准确的办理路径。","相关条件以系统、合同和产品文件为准，我不能提前承诺结果。","为了保护您的资金和信息安全，这一步需要由您本人确认。","目前存在需要进一步核实的情况，我会提交主管或专业岗位处理并告知进展。"]: story.append(Paragraph("“"+x+"”",st["body"]))
     story += [Paragraph("七、办理前自检",st["h1"])]
     for x in ["身份与授权是否已核验","需求、用途和资金来源是否清晰","风险与费用是否充分说明","是否由客户本人完成关键操作","材料、录音和系统记录是否完整","异常是否已按时升级"]: story.append(Paragraph("□ "+x,st["body"]))
-    story += [Spacer(1,12),Paragraph("版本记录：V1.0 / 2026-08-25 / 首次建立RAG演示版 / Mock测试",st["small"])]
+    story += [Spacer(1,12),Paragraph("版本记录：V1.0 / 2026-08-25 / 首次发布 / 内部培训",st["small"])]
     doc.build(story)
 
 if __name__=="__main__":

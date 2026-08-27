@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import { FileBlob, SpreadsheetFile } from '@oai/artifact-tool';
 
-const source = 'D:/JetBrains/project/bank-chat/bank-agent-demo/assets/华辰银行零售客户经理QA知识库_Mock_V1.0.xlsx';
+const source = 'D:/JetBrains/project/bank-chat/bank-agent-demo/assets/华辰银行零售客户经理业务知识问答手册_V1.0.xlsx';
 const out = 'D:/JetBrains/project/bank-chat/outputs/rag_expansion_v2';
 await fs.mkdir(out, { recursive: true });
 const wb = await SpreadsheetFile.importXlsx(await FileBlob.load(source));

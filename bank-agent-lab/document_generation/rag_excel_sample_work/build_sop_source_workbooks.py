@@ -120,7 +120,7 @@ def build_doc(item, index):
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.oddHeader.center.text = f"&B{item['code']} | {item['version']}"
     ws.oddHeader.center.size = 8
-    ws.oddFooter.center.text = "Mock knowledge document | Page &P of &N"
+    ws.oddFooter.center.text = "Internal training document | Page &P of &N"
     ws.oddFooter.center.size = 8
     ws.sheet_properties.pageSetUpPr.autoPageBreaks = True
     path = TMP / f"sop_{index}.xlsx"

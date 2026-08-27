@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$dataPath = 'D:\JetBrains\project\bank-chat\outputs\rag_excel_sample_work\sop_documents.json'
+$dataPath = 'D:\JetBrains\project\bank-chat\bank-agent-lab\document_generation\rag_excel_sample_work\sop_documents.json'
 $assetDir = 'D:\JetBrains\project\bank-chat\bank-agent-demo\assets'
 $data = Get-Content -LiteralPath $dataPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $word = New-Object -ComObject Word.Application
@@ -80,7 +80,7 @@ try {
         $section.Headers.Item(1).Range.Font.Size = 8
         $section.Headers.Item(1).Range.Font.Color = 8421504
         $footer = $section.Footers.Item(1).Range
-        $footer.Text = 'Mock knowledge document | Page '
+        $footer.Text = 'Internal training document | Page '
         $footer.Font.Name = 'Arial'
         $footer.Font.Size = 8
         $footer.ParagraphFormat.Alignment = 2

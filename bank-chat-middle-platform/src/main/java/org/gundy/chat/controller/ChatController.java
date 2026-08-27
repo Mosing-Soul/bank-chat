@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.UUID;
 
 @RestController
@@ -26,7 +27,8 @@ public class ChatController {
 
     @PostMapping
     public ResponseEntity<ChatResponse> chat(@RequestBody ChatRequest request,
-                                             @RequestHeader(value = "X-Trace-Id", required = false) String requestTraceId) {
+                                             @RequestHeader(value = "X-Trace-Id", required = false) String requestTraceId,
+                                             HttpServletRequest httpRequest) {
         String traceId = TraceContext.currentOrCreate(requestTraceId);
         String sessionId = safeSessionId(request);
         String userMessage = request == null ? null : request.effectiveMessage();

@@ -90,6 +90,10 @@ services:
       AI_DIALOGUE_COMMAND_ENABLED: "true"
       AI_DIALOGUE_AUTO_RESUME_READ_ONLY: "true"
       INTERNAL_SKILL_API_KEY: ${INTERNAL_SKILL_API_KEY}
+      ANALYTICS_VIEW_PATH: ${ANALYTICS_VIEW_PATH:-/api/analytics/admin}
+      ANALYTICS_WHITELIST_CLIENT_IDS: ${ANALYTICS_WHITELIST_CLIENT_IDS:-}
+    volumes:
+      - ./data/java-backend:/app/data
     ports:
       - "${JAVA_BACKEND_PORT:-9091}:9091"
     depends_on:

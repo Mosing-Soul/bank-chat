@@ -34,6 +34,7 @@ import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
 import { ChatRequestError } from './api/chat';
 import ErrorCard from './components/ErrorCard';
 import type { ChatMessage, ChatProgressEvent, ChatResponse, Citation, ExecutionTrace, SkillConfig, SkillExampleConfig } from './types/chat';
+import { reportPageView, syncInternalVisitorFlag } from './utils/analytics';
 import {
   createMessageId,
   getOrCreateSessionId,
@@ -225,6 +226,8 @@ function App() {
   };
 
   useEffect(() => {
+    syncInternalVisitorFlag();
+    reportPageView(sessionId);
     document.querySelector<HTMLTextAreaElement>('.composer-input textarea')?.focus();
 
     fetchSkillConfig()

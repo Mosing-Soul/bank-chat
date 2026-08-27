@@ -28,6 +28,14 @@ server:
   port: ${SERVER_PORT:9091}
 
 bank:
+  analytics:
+    enabled: ${ANALYTICS_ENABLED:true}
+    sqlite-path: ${ANALYTICS_SQLITE_PATH:data/bank-chat-analytics.db}
+    # 埋点控制台入口路径，按需改成自己记得住的路径即可（需以 /api/ 开头，复用 nginx 代理）
+    view-path: ${ANALYTICS_VIEW_PATH:/api/analytics/admin}
+    whitelist:
+      client-ids: ${ANALYTICS_WHITELIST_CLIENT_IDS:}
+      ip-prefixes: ${ANALYTICS_WHITELIST_IP_PREFIXES:127.0.0.1,0:0:0:0:0:0:0:1}
   skills:
     config:
       persistence-enabled: ${SKILL_CONFIG_PERSISTENCE_ENABLED:false}

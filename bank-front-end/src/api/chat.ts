@@ -1,4 +1,5 @@
 import type { ChatProgressEvent, ChatRequest, ChatResponse, SkillConfigResponse } from '../types/chat';
+import { analyticsHeaders } from '../utils/analytics';
 
 export class ChatRequestError extends Error {
   code: string;
@@ -32,6 +33,7 @@ export const sendChatMessage = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...analyticsHeaders(),
       },
       body: JSON.stringify(payload),
       signal: controller.signal,

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bank-Chat 埋点控制台</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif; background: #f0f2f5; color: #1f2937; }
+  .topbar { background: #001529; color: #fff; padding: 14px 28px; display: flex; align-items: center; gap: 12px; }
+  .topbar .logo { width: 30px; height: 30px; border-radius: 6px; background: #1677ff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+  .topbar h1 { font-size: 16px; font-weight: 600; }
+  .topbar .sub { font-size: 12px; color: #8c9bab; margin-left: 4px; }
+  .topbar .refresh { margin-left: auto; background: #1677ff; color: #fff; border: none; border-radius: 4px; padding: 6px 16px; font-size: 13px; cursor: pointer; }
+  .topbar .refresh:hover { background: #4096ff; }
+  .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid #e5e7eb; margin-bottom: 20px; }
+  .tab { padding: 10px 22px; font-size: 14px; cursor: pointer; color: #6b7280; border-bottom: 2px solid transparent; }
+  .tab:hover { color: #1677ff; }
+  .tab.active { color: #1677ff; border-bottom-color: #1677ff; font-weight: 600; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px 24px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .card .label { font-size: 13px; color: #6b7280; margin-bottom: 8px; }
+  .card .value { font-size: 30px; font-weight: 600; }
+  .card .value.warn { color: #f5222d; }
+  .panel { background: #fff; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04); overflow: hidden; }
+  .panel .panel-title { padding: 14px 20px; font-size: 14px; font-weight: 600; border-bottom: 1px solid #f0f0f0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 16px; background: #fafafa; color: #6b7280; font-weight: 500; white-space: nowrap; }
+  td { padding: 10px 16px; border-top: 1px solid #f0f0f0; vertical-align: top; }
+  tr:hover td { background: #fafafa; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
+  .badge.success { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+  .badge.error { background: #fff2f0; color: #f5222d; border: 1px solid #ffccc7; }
+  .badge.warn { background: #fffbe6; color: #d48806; border: 1px solid #ffe58f; }
+  .cell-text { max-width: 420px; word-break: break-all; white-space: pre-wrap; }
+  .cell-muted { color: #9ca3af; }
+  .empty { padding: 48px; text-align: center; color: #9ca3af; font-size: 13px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">BC</div>
+  <h1>Bank-Chat 埋点控制台</h1>
+  <span class="sub">访问统计 · 问答记录 · 报错追踪</span>
+  <button class="refresh" onclick="loadAll()">刷新</button>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" data-tab="overview">数据总览</div>
+    <div class="tab" data-tab="chats">对话记录</div>
+    <div class="tab" data-tab="errors">报错记录</div>
+  </div>
+
+  <div id="tab-overview">
+    <div class="cards" id="stat-cards"></div>
+    <div class="panel">
+      <div class="panel-title">近 30 天趋势</div>
+      <table>
+        <thead><tr><th>日期</th><th>访问量</th><th>独立访客</th><th>提问数</th><th>失败数</th></tr></thead>
+        <tbody id="daily-body"></tbody>
+      </table>
+      <div class="empty hidden" id="daily-empty">暂无数据</div>
+    </div>
+  </div>
+
+  <div id="tab-chats" class="hidden">
+    <div class="panel">
+      <div class="panel-title">最近对话（最多 200 条）</div>
+      <table>
+        <thead><tr><th>时间</th><th>状态</th><th>问题</th><th>回答</th><th>耗时</th></tr></thead>
+        <tbody id="chats-body"></tbody>
+      </table>
+      <div class="empty hidden" id="chats-empty">暂无对话记录</div>
+    </div>
+  </div>
+
+  <div id="tab-errors" class="hidden">
+    <div class="panel">
+      <div class="panel-title">报错对话（用于修正回答质量）</div>
+      <table>
+        <thead><tr><th>时间</th><th>状态</th><th>问题</th><th>回答 / 错误信息</th><th>耗时</th></tr></thead>
+        <tbody id="errors-body"></tbody>
+      </table>
+      <div class="empty hidden" id="errors-empty">暂无报错记录</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const STATUS_LABELS = {
+    SUCCESS: ['成功', 'success'],
+    ERROR: ['回答报错', 'error'],
+    TIMEOUT: ['服务超时', 'warn'],
+    CALL_FAILED: ['调用失败', 'error'],
+    EXCEPTION: ['系统异常', 'error'],
+  };
+
+  const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const badge = (status) => {
+    const [label, type] = STATUS_LABELS[status] || [status || '未知', 'warn'];
+    return `<span class="badge ${type}">${escapeHtml(label)}</span>`;
+  };
+
+  const formatTime = (iso) => (iso ? iso.replace('T', ' ').slice(0, 19) : '-');
+
+  const formatDuration = (ms) => (ms == null ? '-' : (ms / 1000).toFixed(1) + 's');
+
+  const renderTable = (bodyId, emptyId, rows, errorMode) => {
+    const body = document.getElementById(bodyId);
+    const empty = document.getElementById(emptyId);
+    if (!rows || rows.length === 0) {
+      body.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    body.innerHTML = rows.map((row) => {
+      const answer = errorMode
+        ? (row.errorMessage ? `<span class="badge error">${escapeHtml(row.errorMessage)}</span><br>` : '') + escapeHtml(row.answer || '')
+        : escapeHtml(row.answer || '');
+      return `<tr>
+        <td class="cell-muted" style="white-space:nowrap">${formatTime(row.createdAt)}</td>
+        <td>${badge(row.status)}</td>
+        <td class="cell-text">${escapeHtml(row.question)}</td>
+        <td class="cell-text">${answer}</td>
+        <td class="cell-muted">${formatDuration(row.durationMs)}</td>
+      </tr>`;
+    }).join('');
+  };
+
+  const renderOverview = (data) => {
+    const totals = data.totals || {};
+    const cards = [
+      ['访问量 (PAGE_VIEW)', totals.pageViews || 0, false],
+      ['独立访客', totals.uniqueVisitors || 0, false],
+      ['提问总数', totals.chats || 0, false],
+      ['失败 / 报错数', totals.failedChats || 0, (totals.failedChats || 0) > 0],
+    ];
+    document.getElementById('stat-cards').innerHTML = cards.map(([label, value, warn]) =>
+      `<div class="card"><div class="label">${label}</div><div class="value ${warn ? 'warn' : ''}">${value}</div></div>`
+    ).join('');
+
+    const daily = data.daily || [];
+    const body = document.getElementById('daily-body');
+    const empty = document.getElementById('daily-empty');
+    if (daily.length === 0) {
+      body.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    body.innerHTML = daily.map((row) => `<tr>
+      <td>${escapeHtml(row.day)}</td>
+      <td>${row.pageViews}</td>
+      <td>${row.visitors}</td>
+      <td>${row.chats}</td>
+      <td class="${row.failedChats > 0 ? 'cell-text' : 'cell-muted'}" ${row.failedChats > 0 ? 'style="color:#f5222d"' : ''}>${row.failedChats}</td>
+    </tr>`).join('');
+  };
+
+  const BASE = location.pathname.replace(/\/+$/, '');
+
+  const loadAll = async () => {
+    try {
+      const [summary, chats, errors] = await Promise.all([
+        fetch(BASE + '/summary').then((r) => r.json()),
+        fetch(BASE + '/events?limit=200').then((r) => r.json()),
+        fetch(BASE + '/events?limit=200&errorsOnly=true').then((r) => r.json()),
+      ]);
+      renderOverview(summary);
+      renderTable('chats-body', 'chats-empty', chats, false);
+      renderTable('errors-body', 'errors-empty', errors, true);
+    } catch (err) {
+      alert('数据加载失败：' + err);
+    }
+  };
+
+  document.querySelectorAll('.tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach((item) => item.classList.remove('active'));
+      tab.classList.add('active');
+      ['overview', 'chats', 'errors'].forEach((name) => {
+        document.getElementById('tab-' + name).classList.toggle('hidden', name !== tab.dataset.tab);
+      });
+    });
+  });
+
+  loadAll();
+</script>
+</body>
+</html>

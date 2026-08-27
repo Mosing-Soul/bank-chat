@@ -2,7 +2,6 @@ package org.gundy.chat.controller;
 
 import org.gundy.chat.entity.ChatRequest;
 import org.gundy.chat.entity.ChatResponse;
-import org.gundy.chat.service.AnalyticsService;
 import org.gundy.chat.exception.ApplicationException;
 import org.gundy.chat.exception.ErrorCode;
 import org.gundy.chat.service.ChatApplicationService;
@@ -21,25 +20,20 @@ import java.util.UUID;
 @RequestMapping("/api/chat")
 public class ChatController {
     private final ChatApplicationService chatApplicationService;
-    private final AnalyticsService analyticsService;
 
-    public ChatController(ChatApplicationService chatApplicationService, AnalyticsService analyticsService) {
+    public ChatController(ChatApplicationService chatApplicationService) {
         this.chatApplicationService = chatApplicationService;
-        this.analyticsService = analyticsService;
     }
 
     @PostMapping
     public ResponseEntity<ChatResponse> chat(@RequestBody ChatRequest request,
-                                             @RequestHeader(value = "X-Trace-Id", required = false) String requestTraceId) {
+                                             @RequestHeader(value = "X-Trace-Id", required = false) String requestTraceId,
+                                             HttpServletRequest httpRequest) {
         String traceId = TraceContext.currentOrCreate(requestTraceId);
         String sessionId = safeSessionId(request);
         String userMessage = request == null ? null : request.effectiveMessage();
         if (!hasText(userMessage)) throw new ApplicationException(ErrorCode.INVALID_REQUEST);
         return ResponseEntity.ok(chatApplicationService.handle(traceId, sessionId, userMessage, request));
-    }
-
-    private String safeMessage(ChatRequest request) {
-        return request == null ? null : request.effectiveMessage();
     }
 
     private String safeSessionId(ChatRequest request) {

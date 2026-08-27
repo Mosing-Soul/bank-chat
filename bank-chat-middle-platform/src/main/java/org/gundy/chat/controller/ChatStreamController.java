@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
@@ -29,7 +30,8 @@ public class ChatStreamController {
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@RequestBody ChatRequest request,
-                             @RequestHeader(value = "X-Trace-Id", required = false) String requestTraceId) {
+                             @RequestHeader(value = "X-Trace-Id", required = false) String requestTraceId,
+                             HttpServletRequest httpRequest) {
         final String traceId = TraceContext.currentOrCreate(requestTraceId);
         final String sessionId = request != null && request.getSessionId() != null
                 ? request.getSessionId() : "";
@@ -38,7 +40,7 @@ public class ChatStreamController {
             DialogueProgress.install(event -> send(emitter, "progress", event));
             try {
                 DialogueProgress.report("REQUEST_RECEIVED", "已接收问题", "请求已进入对话处理流程");
-                ResponseEntity<ChatResponse> response = chatController.chat(request, traceId);
+                ResponseEntity<ChatResponse> response = chatController.chat(request, traceId, httpRequest);
                 send(emitter, "result", response.getBody());
                 emitter.complete();
             } catch (Exception ex) {

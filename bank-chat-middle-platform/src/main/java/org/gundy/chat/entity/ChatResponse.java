@@ -2,7 +2,9 @@ package org.gundy.chat.entity;
 
 import lombok.Data;
 import org.gundy.chat.entity.dialog.DialogState;
+import org.gundy.chat.exception.ErrorCode;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +25,14 @@ public class ChatResponse {
     private DialogState dialogState;
 
     public static ChatResponse friendlyError(String traceId, String sessionId, String message) {
+        return failure(traceId, sessionId, ErrorCode.INTERNAL_ERROR, message);
+    }
+
+    public static ChatResponse failure(String traceId, String sessionId, ErrorCode errorCode) {
+        return failure(traceId, sessionId, errorCode, errorCode.getMessage());
+    }
+
+    private static ChatResponse failure(String traceId, String sessionId, ErrorCode errorCode, String message) {
         ChatResponse response = new ChatResponse();
         response.setTraceId(traceId);
         response.setSessionId(sessionId);
@@ -30,6 +40,12 @@ public class ChatResponse {
         response.setConfidence(0.0D);
         response.setAnswer(message);
         response.setRequiresConfirmation(false);
+        Map<String, Object> error = new LinkedHashMap<String, Object>();
+        error.put("code", errorCode.name());
+        error.put("message", message);
+        error.put("traceId", traceId);
+        error.put("retryable", errorCode.isRetryable());
+        response.setError(error);
         return response;
     }
 

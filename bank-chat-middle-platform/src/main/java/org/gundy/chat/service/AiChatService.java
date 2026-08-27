@@ -60,9 +60,10 @@ public class AiChatService {
         HttpHeaders headers = new HttpHeaders();
         headers.add("X-Trace-Id", traceId);
         HttpEntity<AiChatRequest> entity = new HttpEntity<AiChatRequest>(request, headers);
-        ResponseEntity<ChatResponse> response = restTemplate.exchange(
-                aiChatUrl, HttpMethod.POST, entity, ChatResponse.class);
-        log.info("ai chat invoke, response={}", response);
-        return response.getBody();
+        return AiServiceCallSupport.invoke("ai-chat", aiChatUrl, traceId, () -> {
+            ResponseEntity<ChatResponse> response = restTemplate.exchange(
+                    aiChatUrl, HttpMethod.POST, entity, ChatResponse.class);
+            return response.getBody();
+        });
     }
 }

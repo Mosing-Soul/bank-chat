@@ -2390,3 +2390,60 @@ button.greeting-line {
   border: 0;
   border-top: 1px solid #dbe4f0;
 }
+
+.request-error-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-width: min(460px, 62vw);
+  padding: 14px 15px;
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  border-radius: 12px;
+  background: rgba(255, 251, 235, 0.9);
+  color: #78350f;
+}
+
+.request-error-icon { color: #d97706; font-size: 18px; }
+.request-error-copy { flex: 1; min-width: 0; }
+.request-error-copy strong { display: block; margin-bottom: 4px; color: #713f12; }
+.request-error-copy p { margin: 0 0 6px; color: #92400e; line-height: 1.55; }
+.request-error-copy span {
+  display: block;
+  overflow: hidden;
+  color: #a16207;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.request-error-card button,
+.fatal-error-card button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #92400e;
+  cursor: pointer;
+}
+
+.fatal-error-page {
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+  place-items: center;
+  background: #f5f1e8;
+}
+.fatal-error-card {
+  max-width: 440px;
+  padding: 32px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 20px 60px rgba(71, 85, 105, 0.12);
+  text-align: center;
+}
+.fatal-error-icon { display: block; margin-bottom: 14px; color: #d97706; font-size: 34px; }
+.fatal-error-card h1 { margin: 0 0 10px; color: #1f2937; font-size: 22px; }
+.fatal-error-card p { margin: 0 0 20px; color: #64748b; line-height: 1.7; }

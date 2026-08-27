@@ -10,10 +10,10 @@ import org.gundy.chat.entity.command.DialogueCommandResponse;
 import org.gundy.chat.entity.dialog.DialogState;
 import org.gundy.chat.entity.flow.FlowInstance;
 import org.gundy.chat.flow.FlowEngine;
+import org.gundy.chat.exception.ApplicationException;
 import org.gundy.chat.statemachine.SkillTransitionResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
 import org.gundy.chat.progress.DialogueProgress;
 
 import java.util.List;
@@ -50,7 +50,7 @@ public class DialogueOrchestrationService {
         try {
             DialogueProgress.report("COMMAND_UNDERSTANDING", "正在理解对话动作", "结合当前事项和最近对话判断下一步");
             interpretation = commandService.interpret(traceId, sessionId, userMessage, state, history);
-        } catch (RestClientException ex) {
+        } catch (ApplicationException ex) {
             metrics.fallback(traceId, "COMMAND_SERVICE_UNAVAILABLE");
             return SkillTransitionResult.notHandled();
         }

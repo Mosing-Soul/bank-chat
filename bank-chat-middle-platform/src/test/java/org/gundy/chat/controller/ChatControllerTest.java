@@ -3,6 +3,8 @@ package org.gundy.chat.controller;
 import org.gundy.chat.entity.ChatResponse;
 import org.gundy.chat.entity.HistoryMessage;
 import org.gundy.chat.entity.intent.IntentRouteResult;
+import org.gundy.chat.exception.ApplicationException;
+import org.gundy.chat.exception.ErrorCode;
 import org.gundy.chat.service.AiChatService;
 import org.gundy.chat.service.ChatApplicationService;
 import org.gundy.chat.service.DialogStateMachineService;
@@ -18,7 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.web.client.ResourceAccessException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -33,6 +34,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -74,7 +76,7 @@ class ChatControllerTest {
         when(dialogStateMachineService.handle(anyString(), anyString(), any(), anyString(), isNull(), anyBoolean()))
                 .thenReturn(SkillTransitionResult.notHandled());
         when(memoryService.getHistory("s1")).thenReturn(new ArrayList<HistoryMessage>());
-        ChatResponse response = ChatResponse.friendlyError("trace-1", "s1", "ok");
+        ChatResponse response = success("trace-1", "s1");
         response.setIntent("EXTERNAL_API_QUERY");
         response.setConfidence(0.96D);
         response.setAnswer("gold answer");
@@ -100,7 +102,7 @@ class ChatControllerTest {
         when(dialogStateMachineService.handle(anyString(), anyString(), any(), anyString(), isNull(), anyBoolean()))
                 .thenReturn(SkillTransitionResult.notHandled());
         when(memoryService.getHistory("s1")).thenReturn(new ArrayList<HistoryMessage>());
-        ChatResponse response = ChatResponse.friendlyError("", "s1", "ok");
+        ChatResponse response = success("", "s1");
         response.setAnswer("answer");
         when(aiChatService.invoke(anyString(), eq("s1"), eq("你好"), anyList(),
                 isNull(), eq(false), isNull(), anyDouble(), any(), isNull(), any())).thenReturn(response);
@@ -153,14 +155,39 @@ class ChatControllerTest {
         when(memoryService.getHistory("s1")).thenReturn(new ArrayList<HistoryMessage>());
         when(aiChatService.invoke(eq("trace-timeout"), eq("s1"), eq("你好"), anyList(),
                 isNull(), eq(false), isNull(), anyDouble(), any(), isNull(), any()))
-                .thenThrow(new ResourceAccessException("timeout"));
+                .thenThrow(new ApplicationException(ErrorCode.AI_SERVICE_TIMEOUT));
 
         mockMvc.perform(post("/api/chat")
                         .header("X-Trace-Id", "trace-timeout")
                         .contentType("application/json")
                         .content("{\"sessionId\":\"s1\",\"message\":\"你好\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code", is("AI_SERVICE_TIMEOUT")))
+                .andExpect(jsonPath("$.message", is("AI 服务响应较慢，请稍后重试。")))
+                .andExpect(jsonPath("$.traceId", is("trace-timeout")))
+                .andExpect(jsonPath("$.retryable", is(true)));
+    }
+
+    @Test
+    void failedAiResponseIsNotStoredInConversationMemory() throws Exception {
+        when(intentRouterService.route(any(), anyString(), isNull(), anyBoolean())).thenReturn(noRoute());
+        when(dialogStateMachineService.handle(anyString(), anyString(), any(), anyString(), isNull(), anyBoolean()))
+                .thenReturn(SkillTransitionResult.notHandled());
+        when(memoryService.getHistory("s1")).thenReturn(new ArrayList<HistoryMessage>());
+        ChatResponse response = ChatResponse.failure(
+                "trace-failed-response", "s1", ErrorCode.AI_SERVICE_UNAVAILABLE);
+        when(aiChatService.invoke(eq("trace-failed-response"), eq("s1"), eq("你好"), anyList(),
+                isNull(), eq(false), isNull(), anyDouble(), any(), isNull(), any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/chat")
+                        .header("X-Trace-Id", "trace-failed-response")
+                        .contentType("application/json")
+                        .content("{\"sessionId\":\"s1\",\"message\":\"你好\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.answer", is("AI 服务响应超时或不可用，请稍后再试。")));
+                .andExpect(jsonPath("$.error.code", is("AI_SERVICE_UNAVAILABLE")))
+                .andExpect(jsonPath("$.error.retryable", is(true)));
+
+        verify(memoryService, never()).addConversation(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -170,7 +197,7 @@ class ChatControllerTest {
         passThrough.setClearState(true);
         when(dialogStateMachineService.handle(anyString(), eq("s1"), any(), eq("黄金价格"), eq("GOLD_PRICE"), eq(true)))
                 .thenReturn(passThrough);
-        ChatResponse response = ChatResponse.friendlyError("trace-force", "s1", "ok");
+        ChatResponse response = success("trace-force", "s1");
         response.setIntent("EXTERNAL_API_QUERY");
         response.setAnswer("gold answer");
         when(aiChatService.invoke(eq("trace-force"), eq("s1"), eq("黄金价格"), eq(new ArrayList<HistoryMessage>()),
@@ -203,7 +230,7 @@ class ChatControllerTest {
         passThrough.setClearState(true);
         when(dialogStateMachineService.handle(anyString(), eq("s1"), any(), eq("招行的客户等级是怎么样的"),
                 eq("RAG_QUERY"), eq(true))).thenReturn(passThrough);
-        ChatResponse response = ChatResponse.friendlyError("trace-rag", "s1", "ok");
+        ChatResponse response = success("trace-rag", "s1");
         response.setIntent("KNOWLEDGE_QA");
         response.setAnswer("rag answer");
         when(aiChatService.invoke(eq("trace-rag"), eq("s1"), eq("招行的客户等级是怎么样的"),
@@ -223,9 +250,12 @@ class ChatControllerTest {
     void blankMessageReturnsFriendlyBadRequest() throws Exception {
         mockMvc.perform(post("/api/chat")
                         .contentType("application/json")
-                        .content("{\"sessionId\":\"s1\",\"message\":\"   \"}"))
+                .content("{\"sessionId\":\"s1\",\"message\":\"   \"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.answer", is("请输入要咨询或办理的内容。")));
+                .andExpect(jsonPath("$.code", is("INVALID_REQUEST")))
+                .andExpect(jsonPath("$.message", is("请求内容不完整或格式不正确，请检查后重试。")))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.retryable", is(false)));
     }
 
     private IntentRouteResult noRoute() {
@@ -234,6 +264,14 @@ class ChatControllerTest {
         result.setReason("no deterministic route");
         result.setDialogAct("NO_DETERMINISTIC_ROUTE");
         return result;
+    }
+
+    private ChatResponse success(String traceId, String sessionId) {
+        ChatResponse response = new ChatResponse();
+        response.setTraceId(traceId);
+        response.setSessionId(sessionId);
+        response.setRequiresConfirmation(false);
+        return response;
     }
 
     private IntentRouteResult frontendRoute(String skill) {

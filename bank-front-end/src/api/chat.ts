@@ -1,6 +1,20 @@
 import type { ChatProgressEvent, ChatRequest, ChatResponse, SkillConfigResponse } from '../types/chat';
 import { analyticsHeaders } from '../utils/analytics';
 
+export class ChatRequestError extends Error {
+  code: string;
+  traceId?: string;
+  retryable?: boolean;
+
+  constructor(message: string, code = 'CLIENT_REQUEST_FAILED', traceId?: string, retryable = true) {
+    super(message);
+    this.name = 'ChatRequestError';
+    this.code = code;
+    this.traceId = traceId;
+    this.retryable = retryable;
+  }
+}
+
 const REQUEST_TIMEOUT_MS = 120_000;
 
 export const sendChatMessage = async (
@@ -26,7 +40,15 @@ export const sendChatMessage = async (
     });
 
     if (!response.ok) {
-      throw new Error(`服务异常：${response.status}`);
+      const payload = await response.json().catch(() => undefined) as {
+        code?: string; message?: string; traceId?: string; retryable?: boolean;
+      } | undefined;
+      throw new ChatRequestError(
+        payload?.message || '服务暂时不可用，请稍后重试。',
+        payload?.code || `HTTP_${response.status}`,
+        payload?.traceId || response.headers.get('X-Trace-Id') || undefined,
+        payload?.retryable ?? response.status >= 500,
+      );
     }
 
     if (!response.body) {

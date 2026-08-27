@@ -7,6 +7,8 @@ import org.gundy.chat.entity.HistoryMessage;
 import org.gundy.chat.entity.dialog.DialogState;
 import org.gundy.chat.entity.flow.FlowInstance;
 import org.gundy.chat.entity.intent.IntentRouteResult;
+import org.gundy.chat.exception.ApplicationException;
+import org.gundy.chat.exception.ErrorCode;
 import org.gundy.chat.progress.DialogueProgress;
 import org.gundy.chat.statemachine.SkillTransitionResult;
 import org.springframework.stereotype.Service;
@@ -106,7 +108,7 @@ public class ChatApplicationService {
 
     private ChatResponse normalizeResponse(ChatResponse response, String traceId, String sessionId) {
         if (response == null) {
-            return ChatResponse.friendlyError(traceId, sessionId, "AI 服务暂时不可用，请稍后再试。");
+            throw new ApplicationException(ErrorCode.AI_SERVICE_INVALID_RESPONSE);
         }
         response.setTraceId(hasText(response.getTraceId()) ? response.getTraceId() : traceId);
         response.setSessionId(hasText(response.getSessionId()) ? response.getSessionId() : sessionId);

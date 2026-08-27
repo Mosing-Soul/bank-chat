@@ -30,3 +30,12 @@ python evaluation/rag_evaluator.py all --service-url http://127.0.0.1:8000
 python -m pytest tests -q
 ```
 
+## 运行长期人工回归基线
+
+先启动完整 Java、Python 和前端主链路。独立用例并发执行，多轮用例会在同一会话内按顺序执行：
+
+```powershell
+python evaluation/manual_regression.py --system-version working-tree --concurrency 3
+```
+
+报告写入 `reports/`。脚本自动检查路径、引用、结构化错误和空回答；答案语义及少量浏览器视觉项保留人工复核。

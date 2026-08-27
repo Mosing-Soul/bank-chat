@@ -1,5 +1,12 @@
 export type ChatRole = 'user' | 'assistant';
 
+export interface ChatError {
+  code: string;
+  message: string;
+  traceId?: string;
+  retryable?: boolean;
+}
+
 export interface Citation {
   source: string;
   title?: string;
@@ -85,6 +92,8 @@ export interface ChatMessage {
   data?: Record<string, unknown>;
   requiresConfirmation?: boolean;
   confirmation?: ChatConfirmation | null;
+  error?: ChatError | null;
+  retryPrompt?: string;
   createdAt: string;
 }
 
@@ -108,10 +117,7 @@ export interface ChatResponse {
   skillCalls?: SkillCall[];
   requiresConfirmation?: boolean;
   confirmation?: ChatConfirmation | null;
-  error?: {
-    code: string;
-    message: string;
-  } | null;
+  error?: ChatError | null;
 }
 
 export interface ChatProgressEvent {

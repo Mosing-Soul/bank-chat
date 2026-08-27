@@ -31,6 +31,8 @@ import logoUrl from '../asset/logo-transparent.png';
 import xiaohuaUrl from '../asset/xiaohua-transparent.png';
 import avatarUrl from '../asset/avator.jfif';
 import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
+import { ChatRequestError } from './api/chat';
+import ErrorCard from './components/ErrorCard';
 import type { ChatMessage, ChatProgressEvent, ChatResponse, Citation, ExecutionTrace, SkillConfig, SkillExampleConfig } from './types/chat';
 import { reportPageView, syncInternalVisitorFlag } from './utils/analytics';
 import {
@@ -190,7 +192,7 @@ function App() {
   const [progressSteps, setProgressSteps] = useState<ChatProgressEvent[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [runtimeTrace, setRuntimeTrace] = useState<RuntimeTraceState>({ status: 'IDLE', progress: [] });
-  const [tracePanelOpen, setTracePanelOpen] = useState(() => window.innerWidth >= 1320);
+  const [tracePanelOpen, setTracePanelOpen] = useState(false);
   const [tipVisible, setTipVisible] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
   const messageScrollRef = useRef<HTMLDivElement>(null);
@@ -470,11 +472,19 @@ function App() {
         data: response.data,
         requiresConfirmation: response.requiresConfirmation,
         confirmation: response.confirmation,
+        error: response.error,
+        retryPrompt: content,
         createdAt: new Date().toISOString(),
       };
 
       setMessages((current) => [...current, assistantMessage]);
-      streamAssistantMessage(assistantMessageId, answer);
+      if (response.error) {
+        setIsSending(false);
+        setIsStreaming(false);
+        stopRequestedRef.current = false;
+      } else {
+        streamAssistantMessage(assistantMessageId, answer);
+      }
     } catch (error) {
       stopThinking();
       abortControllerRef.current = null;
@@ -487,13 +497,23 @@ function App() {
         stopRequestedRef.current = false;
         return;
       }
-      const errorText = error instanceof Error ? error.message : '请求失败，请稍后重试。';
+      const requestError = error instanceof ChatRequestError
+        ? error
+        : new ChatRequestError(error instanceof Error ? error.message : '请求失败，请稍后重试。');
+      const errorText = requestError.message;
       setMessages((current) => [
         ...current,
         {
           id: createMessageId(),
           role: 'assistant',
           content: errorText,
+          error: {
+            code: requestError.code,
+            message: requestError.message,
+            traceId: requestError.traceId,
+            retryable: requestError.retryable,
+          },
+          retryPrompt: content,
           createdAt: new Date().toISOString(),
         },
       ]);
@@ -855,6 +875,7 @@ function RuntimeTraceSidebar({
   open: boolean;
   onToggle: () => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const trace = state.trace;
   const retrieval = trace?.retrieval ?? [];
   const webResults = trace?.webResults ?? [];
@@ -863,8 +884,17 @@ function RuntimeTraceSidebar({
   const durationMs = trace?.timing?.totalMs ?? state.clientDurationMs;
   const route = trace?.route ?? (state.status === 'RUNNING' ? '正在判断路径' : '等待提问');
 
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) onToggle();
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    return () => document.removeEventListener('pointerdown', closeOnOutsideClick);
+  }, [open, onToggle]);
+
   return (
-    <>
+    <div ref={containerRef}>
       <button className={`trace-rail-button ${open ? 'trace-rail-button-open' : ''}`} type="button" onClick={onToggle}>
         <SearchOutlined />
         <span>运行追踪</span>
@@ -972,7 +1002,7 @@ function RuntimeTraceSidebar({
           <div className="trace-timing-total"><span>请求总耗时</span><strong>{durationMs != null ? `${durationMs} ms` : state.status === 'RUNNING' ? `${elapsedSeconds * 1000}+ ms` : '--'}</strong></div>
         </section>
       </aside>
-    </>
+    </div>
   );
 }
 
@@ -1242,6 +1272,11 @@ function MessageBubble({
       <div className="message-bubble">
         {isUser ? (
           message.content
+        ) : message.error ? (
+          <ErrorCard
+            error={message.error}
+            onRetry={message.retryPrompt ? () => onAction(message.retryPrompt!) : undefined}
+          />
         ) : (
           <div className="markdown-content">
             {executionTrace ? <CompletedProcessSummary trace={executionTrace} expanded={Boolean(streaming)} /> : null}

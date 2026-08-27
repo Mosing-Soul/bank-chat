@@ -48,10 +48,12 @@ public class DialogueCommandService {
 
         HttpHeaders headers = new HttpHeaders();
         headers.add("X-Trace-Id", traceId);
-        ResponseEntity<DialogueCommandResponse> response = restTemplate.exchange(
-                commandUrl, HttpMethod.POST, new HttpEntity<DialogueCommandRequest>(request, headers),
-                DialogueCommandResponse.class);
-        return response.getBody();
+        return AiServiceCallSupport.invoke("dialogue-command", commandUrl, traceId, () -> {
+            ResponseEntity<DialogueCommandResponse> response = restTemplate.exchange(
+                    commandUrl, HttpMethod.POST, new HttpEntity<DialogueCommandRequest>(request, headers),
+                    DialogueCommandResponse.class);
+            return response.getBody();
+        });
     }
 
     private List<Map<String, Object>> flowSnapshots(DialogState state) {

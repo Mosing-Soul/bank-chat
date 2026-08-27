@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 import uvicorn
 from fastapi import FastAPI, Request
+from app_exceptions import RuntimeNotReadyError, VectorRefreshFailedError, VectorRefreshRejectedError
 
 from ai_chat_models import (
     AiChatRequest,
@@ -18,6 +19,7 @@ from intent.structured_intent import IntentRecognitionService
 from rag_models import QueryRequest, QueryResponse
 from rag_query_service import RagService, build_rag_answer_prompt, unique_sources
 from vector_store_manager import VectorStoreManager
+from error_handlers import install_error_handling
 
 
 logger = logging.getLogger(__name__)
@@ -131,19 +133,20 @@ async def lifespan(app_instance: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+install_error_handling(app)
 
 
 def runtime_from_request(request: Request) -> RuntimeResources:
     runtime = getattr(request.app.state, "runtime", None)
     if runtime is None:
-        raise RuntimeError("application runtime is not initialized")
+        raise RuntimeNotReadyError()
     return runtime
 
 
 def perform_rag_query(question: str, session_id: str, history=None, runtime=None) -> QueryResponse:
     """Compatibility facade for non-HTTP callers."""
     if runtime is None:
-        raise RuntimeError("runtime is required outside an HTTP request")
+        raise RuntimeNotReadyError()
     return runtime.rag_service.query(question, session_id, history)
 
 
@@ -170,11 +173,9 @@ def refresh_vector_store(request: Request):
     try:
         result = runtime.vector_store_manager.refresh(runtime.settings.docs_folder)
     except (FileNotFoundError, ValueError) as exc:
-        logger.warning("vector refresh rejected: %s", exc)
-        return {"status": "error", "message": str(exc)}
+        raise VectorRefreshRejectedError(str(exc)) from exc
     except Exception as exc:
-        logger.exception("vector refresh failed")
-        return {"status": "error", "message": f"向量库重建失败：{type(exc).__name__}"}
+        raise VectorRefreshFailedError(type(exc).__name__) from exc
     return {
         "status": "ok",
         "message": "向量库重建成功",

@@ -3,6 +3,7 @@ package org.gundy.chat.service;
 import org.gundy.chat.entity.HistoryMessage;
 import org.gundy.chat.entity.RagRequest;
 import org.gundy.chat.entity.RagResponse;
+import org.gundy.chat.web.TraceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -25,7 +26,8 @@ public class RagService {
         request.setSessionId(sessionId);
         request.setHistory(history);
 
-        // 调用 Python 服务
-        return restTemplate.postForObject(pythonRagUrl, request, RagResponse.class);
+        String traceId = TraceContext.currentOrCreate(null);
+        return AiServiceCallSupport.invoke("legacy-rag", pythonRagUrl, traceId,
+                () -> restTemplate.postForObject(pythonRagUrl, request, RagResponse.class));
     }
 }

@@ -9,7 +9,8 @@ SYSTEM_PROMPT = """
 只允许使用以下意图：
 - KNOWLEDGE_QA：银行内部制度、产品、客户分层标准、业务流程、SOP、合规要求，需要查内部知识库。
 - EXTERNAL_API_QUERY：当前行情、新闻、天气、汇率或其他公开网络资料，需要联网搜索。
-- GENERAL_CHAT：无需检索即可回答，或者无法可靠判断时的兜底。
+- GENERAL_CHAT：无需检索即可回答的通用对话，包括对助手身份、能力和使用方式的询问，
+  以及问候、解释、写作和无害的日常交流；无法可靠判断时也走此兜底。
 - UNKNOWN：只有多个目标互斥且必须由用户选择时才使用。
 
 分类示例：
@@ -20,7 +21,8 @@ SYSTEM_PROMPT = """
 - “你好” → GENERAL_CHAT
 
 可以同时选择 KNOWLEDGE_QA 和 EXTERNAL_API_QUERY。selectedIntents 写入全部需要执行的意图；
-intent 写主意图；rewrittenQuery 结合最近对话消解指代，改写成独立可检索的问题。
+intent 写主意图；rewrittenQuery 结合最近对话消解指代，改写成独立可理解的问题。
+改写可以补充上下文，但应保留用户原有的目标、条件和子问题。
 当当前输入包含“这个、它、那、如果……呢”等省略表达时，rewrittenQuery 必须补全上一轮的业务对象和用户真正要问的内容，不能原样保留省略句。
 普通模糊问题使用 GENERAL_CHAT，不要返回 UNKNOWN。reason 只写一句简短依据。
 必须以 JSON 对象返回符合 IntentResult 字段定义的结果，不要输出 JSON 之外的文字。

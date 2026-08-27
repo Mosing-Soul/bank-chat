@@ -32,6 +32,7 @@ import xiaohuaUrl from '../asset/xiaohua-transparent.png';
 import avatarUrl from '../asset/avator.jfif';
 import { fetchSkillConfig, saveSkillConfig, sendChatMessage } from './api/chat';
 import type { ChatMessage, ChatProgressEvent, ChatResponse, Citation, ExecutionTrace, SkillConfig, SkillExampleConfig } from './types/chat';
+import { reportPageView, syncInternalVisitorFlag } from './utils/analytics';
 import {
   createMessageId,
   getOrCreateSessionId,
@@ -223,6 +224,8 @@ function App() {
   };
 
   useEffect(() => {
+    syncInternalVisitorFlag();
+    reportPageView(sessionId);
     document.querySelector<HTMLTextAreaElement>('.composer-input textarea')?.focus();
 
     fetchSkillConfig()

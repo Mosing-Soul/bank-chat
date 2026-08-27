@@ -63,6 +63,7 @@ ENV/
 *.egg-info/
 
 # Local data / generated knowledge stores
+/data/
 bank-chat-middle-platform/data/
 *.db
 *.db-shm

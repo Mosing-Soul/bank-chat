@@ -1,4 +1,5 @@
 import type { ChatProgressEvent, ChatRequest, ChatResponse, SkillConfigResponse } from '../types/chat';
+import { analyticsHeaders } from '../utils/analytics';
 
 const REQUEST_TIMEOUT_MS = 120_000;
 
@@ -18,6 +19,7 @@ export const sendChatMessage = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...analyticsHeaders(),
       },
       body: JSON.stringify(payload),
       signal: controller.signal,

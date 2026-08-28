@@ -9,6 +9,12 @@ volumes:
   rag-vector-data:
   huggingface-cache:
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-python-environment: &python-environment
   PYTHON_SERVICE_HOST: 0.0.0.0
   PYTHON_SERVICE_PORT: 8000
@@ -19,12 +25,9 @@ x-python-environment: &python-environment
   BUILD_DOCUMENTS_DIR: /app/assets
   BUILD_VECTOR_DB_DIR: /app/chroma_db
   EMBEDDING_DEVICE: cpu
-  EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-false}
-  JAVA_SKILL_BASE_URL: http://java-backend:9091/internal/skills
 
 x-python-volumes: &python-volumes
   - ./bank-agent-demo/assets:/app/assets:ro
-  - ./models:/app/models:ro
   - rag-vector-data:/app/chroma_db
   - huggingface-cache:/root/.cache/huggingface
 
@@ -42,17 +45,7 @@ services:
       timeout: 3s
       retries: 20
     networks: [bank-net]
-
-  rag-init:
-    image: bank-chat-python-rag:latest
-    build:
-      context: ./bank-agent-demo
-    profiles: ["tools"]
-    env_file: ["${DEPLOY_ENV_FILE:-./.env.deploy}"]
-    environment: *python-environment
-    command: ["python", "build_vector_store.py"]
-    volumes: *python-volumes
-    networks: [bank-net]
+    logging: *default-logging
 
   python-rag:
     image: bank-chat-python-rag:latest
@@ -73,6 +66,7 @@ services:
       redis:
         condition: service_healthy
     networks: [bank-net]
+    logging: *default-logging
 
   java-backend:
     image: bank-chat-java-backend:latest
@@ -86,22 +80,21 @@ services:
       REDIS_PORT: 6379
       RAG_SERVICE_URL: http://python-rag:8000/rag/query
       AI_CHAT_URL: http://python-rag:8000/ai/chat/invoke
-      AI_DIALOGUE_COMMAND_URL: http://python-rag:8000/ai/dialogue/commands
-      AI_DIALOGUE_COMMAND_ENABLED: "true"
-      AI_DIALOGUE_AUTO_RESUME_READ_ONLY: "true"
-      INTERNAL_SKILL_API_KEY: ${INTERNAL_SKILL_API_KEY}
+      AI_DIALOGUE_COMMAND_ENABLED: "false"
+      INTERNAL_SKILL_API_KEY: ${INTERNAL_SKILL_API_KEY:?INTERNAL_SKILL_API_KEY is required}
       ANALYTICS_VIEW_PATH: ${ANALYTICS_VIEW_PATH:-/api/analytics/admin}
       ANALYTICS_WHITELIST_CLIENT_IDS: ${ANALYTICS_WHITELIST_CLIENT_IDS:-}
     volumes:
       - ./data/java-backend:/app/data
-    ports:
-      - "${JAVA_BACKEND_PORT:-9091}:9091"
+    expose:
+      - "9091"
     depends_on:
       redis:
         condition: service_healthy
       python-rag:
         condition: service_healthy
     networks: [bank-net]
+    logging: *default-logging
 
   frontend:
     image: bank-chat-frontend:latest
@@ -113,3 +106,4 @@ services:
       - "${HTTP_PORT:-80}:80"
     depends_on: [java-backend]
     networks: [bank-net]
+    logging: *default-logging

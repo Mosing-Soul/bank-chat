@@ -35,21 +35,26 @@ bank-chat/
 
 ## 快速启动
 
-1. 根据 `.env.deploy` 配置 LLM、Embedding 和外部搜索所需环境变量，请勿提交真实密钥。
-2. 构建服务并初始化向量库：
+1. 复制部署环境变量模板并填写 LLM、Embedding 和外部搜索配置，请勿提交真实密钥：
 
 ```bash
-docker compose build
-docker compose --profile tools run --rm rag-init
+cp .env.deploy.example .env.deploy
 ```
 
-3. 启动完整应用：
+2. 构建并启动完整应用：
 
 ```bash
-docker compose up -d
+docker compose --env-file .env.deploy up -d --build
 ```
 
-默认通过 `http://localhost` 访问前端；端口可由 `HTTP_PORT` 调整。
+Python 服务启动时会检查知识文档指纹：首次部署或文档变化时自动重建向量索引，文档未变化时直接复用已有索引。默认通过 `http://localhost` 访问前端；端口可由 `HTTP_PORT` 调整。
+
+查看启动状态：
+
+```bash
+docker compose --env-file .env.deploy ps
+docker compose --env-file .env.deploy logs -f python-rag java-backend frontend
+```
 
 ## 版本演进
 

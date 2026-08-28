@@ -41,6 +41,9 @@ logs/
 *.bak
 request.json
 
+# Source documents are mounted read-only by Docker Compose
+assets/
+
 # Host-only packaging/editor files
 docker-compose*.yml
 README*.md

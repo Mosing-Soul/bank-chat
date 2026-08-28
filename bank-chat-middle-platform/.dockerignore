@@ -1,4 +1,14 @@
-target
-data
-.idea
+.git
+.gitignore
+.idea/
+.vscode/
+*.iml
+
+target/
+data/
 *.log
+*.tmp
+
+.env
+.env.*
+README*.md
